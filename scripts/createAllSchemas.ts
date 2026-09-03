@@ -2,7 +2,6 @@ import "dotenv/config";
 import mongoose from "mongoose";
 import { connectDB, disconnectDB } from "../src/config/database";
 import * as Models from "../src/models/mongoose";
-import { seedDefaultPlans } from "../src/utils/planSeeder";
 
 async function createAllSchemas() {
   console.log("🚀 === INITIALIZING ALL DATABASE SCHEMAS & INDEXES ===\n");
@@ -27,9 +26,6 @@ async function createAllSchemas() {
       }
     }
 
-    console.log("\n🌱 Seeding default subscription plans...");
-    await seedDefaultPlans();
-    console.log("✅ Default plans check/seed completed.");
 
     console.log("\n🔍 Verifying all collections in the database:");
     const collections = await mongoose.connection.db?.listCollections().toArray();

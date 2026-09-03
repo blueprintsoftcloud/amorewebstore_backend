@@ -16,8 +16,8 @@ const SAMPLE_CATEGORIES = [
 
 async function seedCategories() {
   try {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error("DATABASE_URL not found in .env");
+    const url = process.env.MONGO_URL ?? process.env.DATABASE_URL;
+    if (!url) throw new Error("MONGO_URL or DATABASE_URL not found in .env");
 
     await mongoose.connect(url);
     console.log("✅ MongoDB connected");
