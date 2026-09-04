@@ -1,0 +1,1 @@
+import{e as r,aL as c,j as n,aM as i}from"./index-D0gVnDZN.js";function p({toSuffix:a}){const e=r(),t=c(),s=e.pathname.split("/").slice(0,2).join("/"),o=t.categoryId?a.replace(":categoryId",t.categoryId):a;return n.jsx(i,{to:`${s}/${o}`,replace:!0,state:e.state})}export{p as default};
