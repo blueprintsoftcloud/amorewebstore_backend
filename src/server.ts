@@ -72,6 +72,7 @@ app.use(
     // the frontend loads directly. Helmet's default "same-origin" CORP would block
     // that cross-origin image loading.
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" }, // 👈 Allows Razorpay / Bank OTP popups
   }),
 );
 
