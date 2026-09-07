@@ -22,6 +22,7 @@ import {
   updateCompanySettings,
   getHomepageConfig,
   updateHeroConfig,
+  updateNavbarConfig,
   updateFooterConfig,
   updateStorefrontTheme,
   updateAnnouncementTemplate,
@@ -29,6 +30,7 @@ import {
   updateDiscountTemplate,
   updateFeaturedTemplate,
   uploadAdminImage,
+  deleteAdminImage,
   toggleAnnouncementBar,
 } from "../controllers/companySettings.controller";
 import upload from "../middleware/upload";
@@ -75,12 +77,14 @@ router.get("/company-settings", getCompanySettings);
 router.put("/company-settings", authMiddleware, adminMiddleware, upload.fields([{ name: "logo", maxCount: 1 }, { name: "favicon", maxCount: 1 }, { name: "ogImage", maxCount: 1 }, { name: "qrCode", maxCount: 1 }]), updateCompanySettings);
 router.patch("/announcement-toggle", authMiddleware, adminMiddleware, toggleAnnouncementBar);
 
-// Single-image upload utility (hero images, etc.) — part of Homepage Manager
+// Single-image upload and delete utility (hero images, etc.) — part of Homepage Manager
 router.post("/upload-image", authMiddleware, adminOrStaff("BANNER_EDIT"), upload.single("image"), uploadAdminImage);
+router.post("/delete-image", authMiddleware, adminOrStaff("BANNER_EDIT"), deleteAdminImage);
 
 // Homepage config (hero + footer templates) — part of Homepage Manager
 router.get("/homepage-config", authMiddleware, adminOrStaff("BANNER_VIEW"), getHomepageConfig);
 router.put("/homepage-config/hero", authMiddleware, adminOrStaff("BANNER_EDIT"), updateHeroConfig);
+router.put("/homepage-config/navbar", authMiddleware, adminOrStaff("BANNER_EDIT"), updateNavbarConfig);
 router.put("/homepage-config/footer", authMiddleware, adminOrStaff("BANNER_EDIT"), updateFooterConfig);
 router.put("/homepage-config/theme", authMiddleware, adminOrStaff("BANNER_EDIT"), updateStorefrontTheme);
 // Presentation-only template pickers for the 4 sections that don't have per-template

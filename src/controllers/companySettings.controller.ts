@@ -90,6 +90,10 @@ const DEFAULT_LINK_COLUMNS = [
   { heading: "Support", links: [{ label: "Help Center", url: "/help" }, { label: "Contact Us", url: "/contact" }] },
 ];
 
+const DEFAULT_NAVBAR_CONFIG = {
+  activeTemplate: 1,
+};
+
 const DEFAULT_FOOTER_CONFIG = {
   activeTemplate: 1,
   templates: {
@@ -180,6 +184,7 @@ export const getHomepageConfig = async (req: Request, res: Response) => {
           in: [
             "HERO_CONFIG",
             "FOOTER_CONFIG",
+            "NAVBAR_CONFIG",
             "STOREFRONT_THEME",
             ...Object.values(SECTION_TEMPLATE_KEYS),
           ],
@@ -191,6 +196,7 @@ export const getHomepageConfig = async (req: Request, res: Response) => {
 
     const heroConfig = parseJsonOrDefault(map["HERO_CONFIG"], DEFAULT_HERO_CONFIG);
     const footerConfig = parseJsonOrDefault(map["FOOTER_CONFIG"], DEFAULT_FOOTER_CONFIG);
+    const navbarConfig = parseJsonOrDefault(map["NAVBAR_CONFIG"], DEFAULT_NAVBAR_CONFIG);
     const themeConfig = parseJsonOrDefault(map["STOREFRONT_THEME"], DEFAULT_THEME_CONFIG);
     // Plain integers, not JSON — parseInt with a fallback is enough (no parseJsonOrDefault).
     const toTemplateNum = (raw: string | undefined) => {
@@ -205,6 +211,7 @@ export const getHomepageConfig = async (req: Request, res: Response) => {
     res.status(200).json({
       heroConfig,
       footerConfig,
+      navbarConfig,
       themeConfig,
       announcementTemplate,
       carouselTemplate,
@@ -217,11 +224,54 @@ export const getHomepageConfig = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Recursively scans an arbitrary config object/array and collects all Cloudinary URLs.
+ */
+const extractCloudinaryUrls = (val: unknown): Set<string> => {
+  const urls = new Set<string>();
+  const scan = (item: unknown) => {
+    if (!item) return;
+    if (typeof item === "string") {
+      if (item.includes("cloudinary.com")) {
+        urls.add(item);
+      }
+    } else if (Array.isArray(item)) {
+      item.forEach(scan);
+    } else if (typeof item === "object") {
+      Object.values(item as Record<string, unknown>).forEach(scan);
+    }
+  };
+  scan(val);
+  return urls;
+};
+
 // PUT /api/admin/homepage-config/hero  — admin only
 export const updateHeroConfig = async (req: Request, res: Response) => {
   try {
     const config = req.body as object;
     const value = JSON.stringify(config);
+
+    // Clean up replaced or removed hero images from Cloudinary — prevents orphaning
+    const previousSetting = await prisma.appSetting.findUnique({
+      where: { key: "HERO_CONFIG" },
+    });
+    if (previousSetting?.value) {
+      const prevConfig = parseJsonOrDefault<unknown>(previousSetting.value, null);
+      const prevUrls = extractCloudinaryUrls(prevConfig);
+      const newUrls = extractCloudinaryUrls(config);
+      const orphanedUrls = [...prevUrls].filter((url) => !newUrls.has(url));
+
+      if (orphanedUrls.length > 0) {
+        await Promise.allSettled(
+          orphanedUrls.map((url) =>
+            deleteFromCloudinary(url).catch((e: unknown) =>
+              logger.warn("Failed to delete replaced hero image from Cloudinary", { url, error: e }),
+            ),
+          ),
+        );
+      }
+    }
+
     await prisma.appSetting.upsert({
       where: { key: "HERO_CONFIG" },
       update: { value },
@@ -240,6 +290,28 @@ export const updateFooterConfig = async (req: Request, res: Response) => {
   try {
     const config = req.body as object;
     const value = JSON.stringify(config);
+
+    // Clean up any replaced or removed images from Cloudinary in footer config if present
+    const previousSetting = await prisma.appSetting.findUnique({
+      where: { key: "FOOTER_CONFIG" },
+    });
+    if (previousSetting?.value) {
+      const prevConfig = parseJsonOrDefault<unknown>(previousSetting.value, null);
+      const prevUrls = extractCloudinaryUrls(prevConfig);
+      const newUrls = extractCloudinaryUrls(config);
+      const orphanedUrls = [...prevUrls].filter((url) => !newUrls.has(url));
+
+      if (orphanedUrls.length > 0) {
+        await Promise.allSettled(
+          orphanedUrls.map((url) =>
+            deleteFromCloudinary(url).catch((e: unknown) =>
+              logger.warn("Failed to delete replaced footer image from Cloudinary", { url, error: e }),
+            ),
+          ),
+        );
+      }
+    }
+
     await prisma.appSetting.upsert({
       where: { key: "FOOTER_CONFIG" },
       update: { value },
@@ -250,6 +322,24 @@ export const updateFooterConfig = async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error("updateFooterConfig error", err);
     res.status(500).json({ message: "Error updating footer config" });
+  }
+};
+
+// PUT /api/admin/homepage-config/navbar  — admin only
+export const updateNavbarConfig = async (req: Request, res: Response) => {
+  try {
+    const config = req.body as object;
+    const value = JSON.stringify(config);
+    await prisma.appSetting.upsert({
+      where: { key: "NAVBAR_CONFIG" },
+      update: { value },
+      create: { key: "NAVBAR_CONFIG", value },
+    });
+    await createAuditLog({ req, action: "UPDATE_NAVBAR_CONFIG", entity: "AppSetting", entityId: "NAVBAR_CONFIG" });
+    res.status(200).json({ message: "Navbar config updated", navbarConfig: config });
+  } catch (err: any) {
+    logger.error("updateNavbarConfig error", err);
+    res.status(500).json({ message: "Error updating navbar config" });
   }
 };
 
@@ -330,11 +420,40 @@ export const uploadAdminImage = async (req: Request, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ message: "No file provided" }); return; }
     const folder = (req.body?.folder as string) || "hero";
+    const previousUrl = (req.body?.previousUrl as string) || undefined;
     const url = await uploadToCloudinary(req.file.buffer, folder);
+
+    // If an existing image was being replaced, clean it up immediately from Cloudinary
+    if (previousUrl && previousUrl.includes("cloudinary.com")) {
+      deleteFromCloudinary(previousUrl).catch((e: unknown) =>
+        logger.warn("Failed to delete replaced admin image from Cloudinary", { url: previousUrl, error: e }),
+      );
+    }
+
     res.status(200).json({ url });
   } catch (err: any) {
     logger.error("uploadAdminImage error", err);
     res.status(500).json({ message: "Upload failed" });
+  }
+};
+
+// POST /api/admin/delete-image — admin only
+export const deleteAdminImage = async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body as { url?: string };
+    if (!url || typeof url !== "string") {
+      res.status(400).json({ message: "No image URL provided" });
+      return;
+    }
+    if (url.includes("cloudinary.com")) {
+      await deleteFromCloudinary(url).catch((e: unknown) =>
+        logger.warn("Failed to delete image from Cloudinary", { url, error: e }),
+      );
+    }
+    res.status(200).json({ message: "Image deleted successfully" });
+  } catch (err: any) {
+    logger.error("deleteAdminImage error", err);
+    res.status(500).json({ message: "Failed to delete image" });
   }
 };
 
