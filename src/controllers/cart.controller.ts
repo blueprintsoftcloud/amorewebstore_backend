@@ -15,6 +15,14 @@ const emitCartUpdate = (req: Request, userId: string, cartCount: number) => {
   } catch { /* non-critical */ }
 };
 
+const computeDiscountedPrice = (base: number, discount?: number | null): number => {
+  if (!discount || discount <= 0) return base;
+  const raw = base * (1 - discount / 100);
+  const round = Math.round(raw);
+  const maxRoundingArtifact = Number.isInteger(base) ? Math.max(0.05, base * 0.00006) : 0.02;
+  return Math.abs(raw - round) <= maxRoundingArtifact ? round : Math.round(raw * 100) / 100;
+};
+
 // Helper: compute cart total from CartItems with live product prices — a variant's
 // own priceOverride/discountOverride wins over the product's base price/discount when
 // the item carries one (see mongoose.ts's ProductVariant).
@@ -27,7 +35,7 @@ const computeCartTotal = (
 ) => items.reduce((sum, item) => {
   const base = item.variant?.priceOverride ?? item.product?.price ?? 0;
   const discount = item.variant?.discountOverride ?? item.product?.discount;
-  const price = discount && discount > 0 ? base * (1 - discount / 100) : base;
+  const price = computeDiscountedPrice(base, discount);
   return sum + price * item.quantity;
 }, 0);
 
@@ -208,9 +216,7 @@ export const cartList = async (req: Request, res: Response) => {
       });
 
     const totalAmount = validItems.reduce((sum, i) => {
-      const price = i.product.discount && i.product.discount > 0
-        ? i.product.price * (1 - i.product.discount / 100)
-        : i.product.price;
+      const price = computeDiscountedPrice(i.product.price, i.product.discount);
       return sum + price * i.quantity;
     }, 0);
     const totalQuantity = validItems.reduce((sum, i) => sum + i.quantity, 0);

@@ -91,7 +91,11 @@ const itemPrice = (item: any): number => {
   // A variant's own discount (e.g. a promo on just the 50ml bottle) wins over the
   // product-level one — see mongoose.ts's ProductVariant discountOverride.
   const discount = item.variant?.discountOverride ?? item.product.discount;
-  return discount && discount > 0 ? base * (1 - discount / 100) : base;
+  if (!discount || discount <= 0) return base;
+  const raw = base * (1 - discount / 100);
+  const round = Math.round(raw);
+  const maxRoundingArtifact = Number.isInteger(base) ? Math.max(0.05, base * 0.00006) : 0.02;
+  return Math.abs(raw - round) <= maxRoundingArtifact ? round : Math.round(raw * 100) / 100;
 };
 
 // GET /api/orders/pre-checkout  (authenticated)
