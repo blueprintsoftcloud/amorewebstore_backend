@@ -170,19 +170,39 @@ export const calculateShippingWithConfig = async (
 
   // A configured district/city rate (nested under the matched state) wins over that
   // state's flat rate — e.g. Kerala is ₹50 flat, but Ernakulam is ₹40.
-  const cityClean = (city || "").trim().toLowerCase();
-  const districtMap = matchedKey ? config.districtRates?.[matchedKey] : undefined;
-  const matchedDistrictKey = cityClean && districtMap
-    ? Object.keys(districtMap).find((k) => k.toLowerCase() === cityClean)
-    : undefined;
+  // Search districtRates by state name directly (independent of whether stateRates has this state).
+  const districtRatesAll = config.districtRates || {};
+  const matchedDistrictStateKey = Object.keys(districtRatesAll).find(
+    (k) => k.toLowerCase() === stateClean
+  );
+  const districtMap = matchedDistrictStateKey ? districtRatesAll[matchedDistrictStateKey] : undefined;
 
-  if (matchedDistrictKey) {
-    const districtRate = districtMap![matchedDistrictKey];
+  const cityClean = (city || "").trim().toLowerCase();
+  let matchedDistrictKey: string | undefined;
+
+  if (districtMap) {
+    // 1. Exact match (case-insensitive)
+    matchedDistrictKey = Object.keys(districtMap).find(
+      (k) => k.toLowerCase().trim() === cityClean
+    );
+
+    // 2. Substring match (e.g. "Kollam City" vs "Kollam", or district in cityClean)
+    if (!matchedDistrictKey && cityClean) {
+      matchedDistrictKey = Object.keys(districtMap).find((k) => {
+        const kLower = k.toLowerCase().trim();
+        return cityClean.includes(kLower) || kLower.includes(cityClean);
+      });
+    }
+  }
+
+  if (matchedDistrictKey && districtMap) {
+    const districtRate = districtMap[matchedDistrictKey];
+    const displayState = matchedDistrictStateKey || matchedStateName;
     return {
       shippingCharge: districtRate,
       distanceKm: 0,
       type: "manual",
-      label: `${matchedDistrictKey}, ${matchedStateName} district rate — ₹${districtRate} flat`,
+      label: `${matchedDistrictKey}, ${displayState} district rate — ₹${districtRate} flat`,
     };
   }
 
@@ -190,7 +210,7 @@ export const calculateShippingWithConfig = async (
     shippingCharge: baseRate,
     distanceKm: 0,
     type: "manual",
-    label: `${matchedStateName} base rate — \u20b9${baseRate} flat`,
+    label: `${matchedStateName} base rate — ₹${baseRate} flat`,
   };
 };
 

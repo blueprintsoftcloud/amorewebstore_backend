@@ -163,6 +163,10 @@ export const previewShipping = async (req: Request, res: Response) => {
       }
     } catch { /* geocoding failed — proceed with empty state */ }
 
+    if (!state && typeof req.body.state === "string") state = req.body.state.trim();
+    if (!city && typeof req.body.city === "string") city = req.body.city.trim();
+    if (!zipCode && typeof req.body.zipCode === "string") zipCode = req.body.zipCode.trim();
+
     const result = await calculateShippingWithConfig(latitude, longitude, country, state, city, zipCode, config, warehouse.lat, warehouse.lng);
     return res.json({ ...result, address: fullAddress, city, state, country, zipCode, lat: latitude, lng: longitude, free: false });
   } catch (err: any) {

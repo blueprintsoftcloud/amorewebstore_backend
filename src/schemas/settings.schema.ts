@@ -12,4 +12,6 @@ export const updateShippingConfigSchema = z.object({
   sameStateFreeKmThreshold: z.coerce.number().min(0).optional(),
   noLocationFlatRate: z.coerce.number().min(0).optional(),
   stateRates: z.union([z.string(), z.record(z.string(), z.coerce.number())]).optional(),
+  districtRates: z.union([z.string(), z.record(z.string(), z.record(z.string(), z.coerce.number()))]).optional(),
 });
+
