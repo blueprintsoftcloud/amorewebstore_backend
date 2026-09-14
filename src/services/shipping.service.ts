@@ -107,6 +107,10 @@ export interface ShippingConfig {
    * e.g. { Kerala: { Ernakulam: 40, Kochi: 35 } }. When the customer's city matches
    * an entry here (case-insensitive) it wins over that state's flat stateRates value. */
   districtRates?: Record<string, Record<string, number>>;
+  /** Payment method toggles for shipping price calculation */
+  calculateShippingForCOD?: boolean;
+  calculateShippingForOnline?: boolean;
+  calculateShippingForQR?: boolean;
 }
 
 export const DEFAULT_SHIPPING_CONFIG: ShippingConfig = {
@@ -115,6 +119,9 @@ export const DEFAULT_SHIPPING_CONFIG: ShippingConfig = {
   noLocationFlatRate: 50,
   stateRates: { Kerala: 50 },
   districtRates: {},
+  calculateShippingForCOD: true,
+  calculateShippingForOnline: true,
+  calculateShippingForQR: true,
 };
 
 export interface ShippingBreakdown {

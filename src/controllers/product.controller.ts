@@ -437,14 +437,14 @@ export const productDelete = async (req: Request, res: Response) => {
     // revenue loss — admin must resolve orders first.
     const openOrderCount = await prisma.order.count({
       where: {
-        orderStatus: { notIn: ["DELIVERED", "CANCELLED"] },
+        orderStatus: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
         items: { some: { productId: id } },
       },
     });
 
     if (openOrderCount > 0) {
       return res.status(409).json({
-        message: `Cannot delete: ${openOrderCount} open order${openOrderCount > 1 ? "s" : ""} contain this product. Wait until all orders are delivered or cancelled before deleting.`,
+        message: `Cannot delete: ${openOrderCount} open order${openOrderCount > 1 ? "s" : ""} contain this product. Wait until all orders are delivered, cancelled, or returned before deleting.`,
       });
     }
 

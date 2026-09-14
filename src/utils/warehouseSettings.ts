@@ -35,6 +35,9 @@ const SHIPPING_DEFAULTS: Record<string, string> = {
   SHIPPING_NO_LOCATION_FLAT: "50",
   SHIPPING_STATE_RATES: JSON.stringify({ Kerala: 50 }),
   SHIPPING_DISTRICT_RATES: JSON.stringify({}),
+  SHIPPING_CALCULATE_COD: "true",
+  SHIPPING_CALCULATE_ONLINE: "true",
+  SHIPPING_CALCULATE_QR: "true",
 };
 
 export async function getShippingConfigFromDB(): Promise<ShippingConfig> {
@@ -71,5 +74,8 @@ export async function getShippingConfigFromDB(): Promise<ShippingConfig> {
     noLocationFlatRate: Number(map["SHIPPING_NO_LOCATION_FLAT"] ?? 50),
     stateRates,
     districtRates,
+    calculateShippingForCOD: map["SHIPPING_CALCULATE_COD"] !== "false" && map["SHIPPING_CALCULATE_COD"] !== false,
+    calculateShippingForOnline: map["SHIPPING_CALCULATE_ONLINE"] !== "false" && map["SHIPPING_CALCULATE_ONLINE"] !== false,
+    calculateShippingForQR: map["SHIPPING_CALCULATE_QR"] !== "false" && map["SHIPPING_CALCULATE_QR"] !== false,
   };
 }

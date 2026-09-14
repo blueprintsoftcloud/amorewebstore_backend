@@ -97,7 +97,7 @@ export const getStaffDashboard = async (_req: Request, res: Response) => {
     ]);
 
     // Order status breakdown (pie chart)
-    const statuses = ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
+    const statuses = ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
     const statusCounts = await Promise.all(
       statuses.map((s) => prisma.order.count({ where: { orderStatus: s } })),
     );

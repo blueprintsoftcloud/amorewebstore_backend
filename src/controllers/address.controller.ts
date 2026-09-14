@@ -48,46 +48,11 @@ export const saveLocationAndGetShipping = async (req: Request, res: Response) =>
       return res.status(400).json({ message: "latitude and longitude are required" });
     }
 
-    let data: any = null;
-    try {
-      const geoResponse = await geocoder.reverse({ lat: latitude, lon: longitude });
-      if (geoResponse.length) {
-        data = geoResponse[0];
-      }
-    } catch {
-      // geocoder failed, proceed to fallback
-    }
-
-    // Fallback: direct Nominatim fetch with valid User-Agent
-    if (!data || (!data.state && !data.city)) {
-      try {
-        const osmRes = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
-          {
-            headers: {
-              "User-Agent": "AmoreStoreApp/1.0 (support@amorewebstore.com)",
-              "Accept-Language": "en",
-            },
-            signal: AbortSignal.timeout(4000),
-          }
-        );
-        if (osmRes.ok) {
-          const osmData: any = await osmRes.json();
-          const addr = osmData.address || {};
-          data = {
-            state: addr.state || addr.region || "",
-            city: addr.city || addr.town || addr.village || addr.suburb || addr.county || "",
-            country: addr.country || "India",
-            zipcode: addr.postcode || "",
-            formattedAddress: osmData.display_name || "",
-          };
-        }
-      } catch {}
-    }
-
-    if (!data || (!data.state && !data.city)) {
+    const geoResponse = await geocoder.reverse({ lat: latitude, lon: longitude });
+    if (!geoResponse.length) {
       return res.status(400).json({ message: "Address not found for these coordinates" });
     }
+    const data = geoResponse[0];
 
     const [warehouse, config] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
     const shippingResult = await calculateShippingWithConfig(
@@ -112,11 +77,17 @@ export const saveLocationAndGetShipping = async (req: Request, res: Response) =>
       longitude,
       isDefault: true,
     };
+    const toggles = {
+      calculateShippingForCOD: config.calculateShippingForCOD !== false,
+      calculateShippingForOnline: config.calculateShippingForOnline !== false,
+      calculateShippingForQR: config.calculateShippingForQR !== false,
+    };
+
     const address = existingDefault
       ? await Address.findByIdAndUpdate(existingDefault.id, addressData, { new: true })
       : await Address.create(addressData);
 
-    res.status(200).json({ address, distance: distanceKm.toFixed(2) + " KM", shippingCharge });
+    res.status(200).json({ address, distance: distanceKm.toFixed(2) + " KM", shippingCharge, ...toggles });
   } catch (err: any) {
     logger.error("saveLocationAndGetShipping error", err);
     res.status(500).json({ error: err.message });
@@ -136,6 +107,12 @@ export const saveManualAddress = async (req: Request, res: Response) => {
     const [warehouse, config] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
     const shippingCharge = (await calculateShippingWithConfig(0, 0, country, state ?? "", city ?? "", zipCode, config, warehouse.lat, warehouse.lng)).shippingCharge;
 
+    const toggles = {
+      calculateShippingForCOD: config.calculateShippingForCOD !== false,
+      calculateShippingForOnline: config.calculateShippingForOnline !== false,
+      calculateShippingForQR: config.calculateShippingForQR !== false,
+    };
+
     const existingDefault = await Address.findOne({ userId, isDefault: true });
     const addressData = {
       userId, fullAddress, city, state: state ?? "", country, zipCode,
@@ -145,7 +122,7 @@ export const saveManualAddress = async (req: Request, res: Response) => {
       ? await Address.findByIdAndUpdate(existingDefault.id, addressData, { new: true })
       : await Address.create(addressData);
 
-    res.status(200).json({ address, shippingCharge });
+    res.status(200).json({ address, shippingCharge, ...toggles });
   } catch (err: any) {
     logger.error("saveManualAddress error", err);
     res.status(500).json({ error: err.message });
@@ -172,10 +149,16 @@ export const previewShipping = async (req: Request, res: Response) => {
 
     const [warehouse, config] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
 
+    const toggles = {
+      calculateShippingForCOD: config.calculateShippingForCOD !== false,
+      calculateShippingForOnline: config.calculateShippingForOnline !== false,
+      calculateShippingForQR: config.calculateShippingForQR !== false,
+    };
+
     // Manual mode — no GPS, use provided state/city/zipCode for rate lookup
     if (manual) {
       const result = await calculateShippingWithConfig(0, 0, "India", manualState ?? "", manualCity ?? "", req.body.zipCode ?? "", config, warehouse.lat, warehouse.lng);
-      return res.json({ ...result, free: false });
+      return res.json({ ...result, ...toggles, free: false });
     }
 
     if (latitude === undefined || longitude === undefined) {
@@ -196,45 +179,14 @@ export const previewShipping = async (req: Request, res: Response) => {
         zipCode = geo[0].zipcode ?? "";
         fullAddress = cleanStreetAddress(geo[0].formattedAddress ?? "", city, state, zipCode, country);
       }
-    } catch { /* geocoding failed — proceed with fallback */ }
-
-    // Fallback: direct Nominatim fetch with valid User-Agent
-    if (!state && !city) {
-      try {
-        const osmRes = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
-          {
-            headers: {
-              "User-Agent": "AmoreStoreApp/1.0 (support@amorewebstore.com)",
-              "Accept-Language": "en",
-            },
-            signal: AbortSignal.timeout(4000),
-          }
-        );
-        if (osmRes.ok) {
-          const osmData: any = await osmRes.json();
-          const addr = osmData.address || {};
-          state = addr.state || addr.region || "";
-          city = addr.city || addr.town || addr.village || addr.suburb || addr.county || "";
-          country = addr.country || "India";
-          zipCode = addr.postcode || "";
-          fullAddress = cleanStreetAddress(osmData.display_name || "", city, state, zipCode, country);
-        }
-      } catch {}
-    }
+    } catch { /* geocoding failed — proceed with empty state */ }
 
     if (!state && typeof req.body.state === "string") state = req.body.state.trim();
     if (!city && typeof req.body.city === "string") city = req.body.city.trim();
     if (!zipCode && typeof req.body.zipCode === "string") zipCode = req.body.zipCode.trim();
 
-    if (!state && !city) {
-      return res.status(400).json({
-        message: "Address not found for these coordinates. Please enter your Pincode manually.",
-      });
-    }
-
     const result = await calculateShippingWithConfig(latitude, longitude, country, state, city, zipCode, config, warehouse.lat, warehouse.lng);
-    return res.json({ ...result, address: fullAddress, city, state, country, zipCode, lat: latitude, lng: longitude, free: false });
+    return res.json({ ...result, ...toggles, address: fullAddress, city, state, country, zipCode, lat: latitude, lng: longitude, free: false });
   } catch (err: any) {
     logger.error("previewShipping error", err);
     res.status(500).json({ error: err.message });

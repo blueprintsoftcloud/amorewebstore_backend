@@ -6,7 +6,7 @@ export const RoleEnum = ['CUSTOMER', 'ADMIN', 'SUPER_ADMIN', 'STAFF'] as const;
 export type Role = typeof RoleEnum[number];
 
 export const Role = { CUSTOMER: 'CUSTOMER', ADMIN: 'ADMIN', SUPER_ADMIN: 'SUPER_ADMIN', STAFF: 'STAFF' } as const;
-export const OrderStatusEnum = ['PROCESSING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const;
+export const OrderStatusEnum = ['PROCESSING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED'] as const;
 export type OrderStatus = typeof OrderStatusEnum[number];
 
 export const PaymentStatusEnum = ['PENDING', 'PAID', 'FAILED', 'REFUNDED'] as const;
@@ -460,6 +460,8 @@ export interface IOrder extends Document {
   /** Manual/self-delivery shipments have no courier or tracking ID — an optional free-text note instead. */
   shippingNote?: string;
   shippedAt?: Date;
+  invoicePrinted?: boolean;
+  invoicePrintedAt?: Date | null;
   items?: IOrderItem[]; // populated
   createdAt: Date;
   updatedAt: Date;
@@ -503,6 +505,8 @@ const OrderSchema = new Schema<IOrder>(
     trackingLink: String,
     shippingNote: String,
     shippedAt: Date,
+    invoicePrinted: { type: Boolean, default: false },
+    invoicePrintedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -512,6 +516,7 @@ OrderSchema.index({ orderStatus: 1 });
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
 OrderSchema.index({ placedByAdminId: 1 });
+OrderSchema.index({ invoicePrinted: 1, createdAt: -1 });
 
 export const Order = mongoose.model<IOrder>('Order', OrderSchema);
 export const OrderItem = mongoose.model<IOrderItem>('OrderItem', OrderItemSchema);

@@ -62,7 +62,7 @@ export const archiveOrders = async (): Promise<{ archived: number }> => {
     // an anomaly worth keeping visible in the live collection, not archiving away.
     const batch = await Order.find({
       createdAt: { $lt: cutoff },
-      orderStatus: { $in: ["DELIVERED", "CANCELLED"] },
+      orderStatus: { $in: ["DELIVERED", "CANCELLED", "RETURNED"] },
     })
       .limit(BATCH_SIZE)
       .lean();

@@ -94,6 +94,9 @@ const SHIPPING_DEFAULTS: Record<string, string> = {
   SHIPPING_NO_LOCATION_FLAT: "50",
   SHIPPING_STATE_RATES: JSON.stringify({ Kerala: 50 }),
   SHIPPING_DISTRICT_RATES: JSON.stringify({}),
+  SHIPPING_CALCULATE_COD: "true",
+  SHIPPING_CALCULATE_ONLINE: "true",
+  SHIPPING_CALCULATE_QR: "true",
 };
 
 // GET /api/settings/shipping-config  (admin / super-admin)
@@ -132,6 +135,9 @@ export const getShippingConfig = async (req: Request, res: Response) => {
       noLocationFlatRate: Number(map["SHIPPING_NO_LOCATION_FLAT"] ?? 50),
       stateRates,
       districtRates,
+      calculateShippingForCOD: map["SHIPPING_CALCULATE_COD"] !== "false" && map["SHIPPING_CALCULATE_COD"] !== false,
+      calculateShippingForOnline: map["SHIPPING_CALCULATE_ONLINE"] !== "false" && map["SHIPPING_CALCULATE_ONLINE"] !== false,
+      calculateShippingForQR: map["SHIPPING_CALCULATE_QR"] !== "false" && map["SHIPPING_CALCULATE_QR"] !== false,
     });
   } catch (err: any) {
     logger.error("getShippingConfig error", err);
@@ -148,6 +154,9 @@ export const updateShippingConfig = async (req: Request, res: Response) => {
       noLocationFlatRate,
       stateRates,
       districtRates,
+      calculateShippingForCOD,
+      calculateShippingForOnline,
+      calculateShippingForQR,
     } = req.body;
     const entries: Record<string, any> = {};
     if (sameStatePerKmRate !== undefined) entries["SHIPPING_SAME_STATE_PER_KM"] = String(Number(sameStatePerKmRate));
@@ -158,6 +167,15 @@ export const updateShippingConfig = async (req: Request, res: Response) => {
     }
     if (districtRates !== undefined) {
       entries["SHIPPING_DISTRICT_RATES"] = typeof districtRates === "string" ? districtRates : JSON.stringify(districtRates);
+    }
+    if (calculateShippingForCOD !== undefined) {
+      entries["SHIPPING_CALCULATE_COD"] = String(Boolean(calculateShippingForCOD));
+    }
+    if (calculateShippingForOnline !== undefined) {
+      entries["SHIPPING_CALCULATE_ONLINE"] = String(Boolean(calculateShippingForOnline));
+    }
+    if (calculateShippingForQR !== undefined) {
+      entries["SHIPPING_CALCULATE_QR"] = String(Boolean(calculateShippingForQR));
     }
 
     await Promise.all(

@@ -12,12 +12,13 @@ export const verifyPaymentSchema = z.object({
     .string({ required_error: "Razorpay signature is required" })
     .min(1),
   buyNowProductId: z.string().optional(),
+  buyNowVariantId: z.string().nullable().optional(),
 });
 
 export const updateOrderStatusSchema = z
   .object({
     orderStatus: z.enum(
-      ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"],
+      ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"],
       { required_error: "Order status is required" },
     ),
     // Only meaningful when orderStatus === "SHIPPED" — see the superRefine below.

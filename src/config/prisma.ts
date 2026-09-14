@@ -176,7 +176,7 @@ const OPERATOR_MAP: Record<string, string> = {
 };
 
 const isObject = (value: any): value is Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+  typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof RegExp);
 
 const isObjectIdLike = (value: any) =>
   value instanceof Types.ObjectId || value?._bsontype === 'ObjectId';
@@ -292,6 +292,23 @@ const translateWhere = async (where: any, modelName: string, session?: ClientSes
       const ids = await resolveRelationFilter(modelName, key, value, session);
       result[relation.localField] = ids.length > 0 ? { $in: ids } : { $in: [] };
       continue;
+    }
+
+    if ((key === 'id' || key === '_id') && isPrismaOperatorObject(value)) {
+      const stringOp = Object.keys(value as object).find((k) => ['contains', 'startsWith', 'endsWith'].includes(k));
+      if (stringOp) {
+        const raw = String((value as any)[stringOp] ?? '');
+        const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = stringOp === 'startsWith' ? `^${escaped}` : stringOp === 'endsWith' ? `${escaped}$` : escaped;
+        result.$expr = {
+          $regexMatch: {
+            input: { $toString: '$_id' },
+            regex: pattern,
+            options: 'i',
+          },
+        };
+        continue;
+      }
     }
 
     if (isPrismaOperatorObject(value)) {

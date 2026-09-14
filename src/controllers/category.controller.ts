@@ -263,14 +263,14 @@ export const categoryDelete = async (req: Request, res: Response) => {
     if (productIds.length > 0) {
       const openOrderCount = await prisma.order.count({
         where: {
-          orderStatus: { notIn: ["DELIVERED", "CANCELLED"] },
+          orderStatus: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
           items: { some: { productId: { in: productIds } } },
         },
       });
 
       if (openOrderCount > 0) {
         return res.status(409).json({
-          message: `Cannot delete: ${openOrderCount} open order${openOrderCount > 1 ? "s" : ""} contain products from this category or its subcategories. Wait until all orders are delivered or cancelled before deleting.`,
+          message: `Cannot delete: ${openOrderCount} open order${openOrderCount > 1 ? "s" : ""} contain products from this category or its subcategories. Wait until all orders are delivered, cancelled, or returned before deleting.`,
         });
       }
 

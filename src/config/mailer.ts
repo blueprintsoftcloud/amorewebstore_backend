@@ -83,6 +83,7 @@ export const orderStatusEmailPayload = (
     SHIPPED:    { label: "Shipped",    color: "#3b82f6", message: "Your order is on its way! Expect delivery soon." },
     DELIVERED:  { label: "Delivered",  color: "#22c55e", message: "Your order has been delivered. We hope you love it!" },
     CANCELLED:  { label: "Cancelled",  color: "#ef4444", message: "Your order has been cancelled. If you have any questions, please contact support." },
+    RETURNED:   { label: "Returned to Origin", color: "#9333ea", message: "Your order could not be delivered by the courier and has been returned to origin. If you need assistance or a refund, please contact support." },
   };
 
   const cfg = statusConfig[status] ?? {

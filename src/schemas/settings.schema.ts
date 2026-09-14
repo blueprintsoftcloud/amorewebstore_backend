@@ -13,5 +13,8 @@ export const updateShippingConfigSchema = z.object({
   noLocationFlatRate: z.coerce.number().min(0).optional(),
   stateRates: z.union([z.string(), z.record(z.string(), z.coerce.number())]).optional(),
   districtRates: z.union([z.string(), z.record(z.string(), z.record(z.string(), z.coerce.number()))]).optional(),
+  calculateShippingForCOD: z.boolean().optional(),
+  calculateShippingForOnline: z.boolean().optional(),
+  calculateShippingForQR: z.boolean().optional(),
 });
 

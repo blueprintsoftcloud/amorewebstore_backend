@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import crypto from "crypto";
+import mongoose from "mongoose";
 import { User, Order, Cart, Product, PaymentLog, StaffProfile, Role, OrderStatus, NotificationType } from "../models/mongoose";
 import razorpay from "../config/razorpay";
 import { calculateShippingWithConfig } from "../services/shipping.service";
@@ -150,7 +151,11 @@ export const preCheckout = async (req: Request, res: Response) => {
 export const placeOrder = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { couponId, buyNowProductId } = req.body as { couponId?: string; buyNowProductId?: string };
+    const { couponId, buyNowProductId, buyNowVariantId } = req.body as {
+      couponId?: string;
+      buyNowProductId?: string;
+      buyNowVariantId?: string;
+    };
 
     const cart = await prisma.cart.findUnique({
       where: { userId },
@@ -165,9 +170,12 @@ export const placeOrder = async (req: Request, res: Response) => {
     if (!address)
       return res.status(400).json({ message: "Delivery address missing" });
 
-    // When Buy Now is used, only process the specified product
+    // When Buy Now is used, only process the specified product and variant
     const eligibleItems = buyNowProductId
-      ? cart.items.filter((i: any) => i.product.id === buyNowProductId)
+      ? cart.items.filter((i: any) =>
+          i.product.id === buyNowProductId &&
+          (!buyNowVariantId || i.variantId === buyNowVariantId),
+        )
       : cart.items;
 
     if (eligibleItems.length === 0)
@@ -198,17 +206,21 @@ export const placeOrder = async (req: Request, res: Response) => {
     let shippingCharge: number;
     if (warehouseFeatureEnabled) {
       const [warehouse, shippingConfig] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
-      shippingCharge = (await calculateShippingWithConfig(
-        address.latitude ?? 0,
-        address.longitude ?? 0,
-        address.country,
-        address.state,
-        address.city ?? "",
-        address.zipCode ?? "",
-        shippingConfig,
-        warehouse.lat,
-        warehouse.lng,
-      )).shippingCharge;
+      if (shippingConfig.calculateShippingForOnline === false) {
+        shippingCharge = 0; // Shipping calculation disabled for Online Payments → Free
+      } else {
+        shippingCharge = (await calculateShippingWithConfig(
+          address.latitude ?? 0,
+          address.longitude ?? 0,
+          address.country,
+          address.state,
+          address.city ?? "",
+          address.zipCode ?? "",
+          shippingConfig,
+          warehouse.lat,
+          warehouse.lng,
+        )).shippingCharge;
+      }
     } else {
       shippingCharge = 0; // Warehouse Settings disabled → free shipping
     }
@@ -303,8 +315,8 @@ export const placeOrder = async (req: Request, res: Response) => {
 // POST /api/orders/verify  (authenticated)
 export const verifyPayment = async (req: Request, res: Response) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, buyNowProductId } =
-      req.body as { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string; buyNowProductId?: string };
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, buyNowProductId, buyNowVariantId } =
+      req.body as { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string; buyNowProductId?: string; buyNowVariantId?: string };
     const userId = req.user!.id;
 
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
@@ -373,7 +385,13 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
         // Clear only the bought item (Buy Now) or the entire cart (regular checkout)
         if (buyNowProductId) {
-          await tx.cartItem.deleteMany({ where: { cart: { userId }, productId: buyNowProductId } });
+          await tx.cartItem.deleteMany({
+            where: {
+              cart: { userId },
+              productId: buyNowProductId,
+              ...(buyNowVariantId ? { variantId: buyNowVariantId } : {}),
+            },
+          });
         } else {
           await tx.cart.deleteMany({ where: { userId } });
         }
@@ -468,7 +486,11 @@ export const verifyPayment = async (req: Request, res: Response) => {
 export const placeOrderPOD = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { couponId, buyNowProductId } = req.body as { couponId?: string; buyNowProductId?: string };
+    const { couponId, buyNowProductId, buyNowVariantId } = req.body as {
+      couponId?: string;
+      buyNowProductId?: string;
+      buyNowVariantId?: string;
+    };
 
     const cart = await prisma.cart.findUnique({
       where: { userId },
@@ -491,9 +513,12 @@ export const placeOrderPOD = async (req: Request, res: Response) => {
         });
     }
 
-    // When Buy Now is used, only process the specified product
+    // When Buy Now is used, only process the specified product and variant
     const eligibleItems = buyNowProductId
-      ? cart.items.filter((i: any) => i.product.id === buyNowProductId)
+      ? cart.items.filter((i: any) =>
+          i.product.id === buyNowProductId &&
+          (!buyNowVariantId || i.variantId === buyNowVariantId),
+        )
       : cart.items;
 
     if (eligibleItems.length === 0)
@@ -518,17 +543,21 @@ export const placeOrderPOD = async (req: Request, res: Response) => {
     let shippingCharge: number;
     if (warehouseFeatureEnabledPOD) {
       const [warehouse, shippingConfig] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
-      shippingCharge = (await calculateShippingWithConfig(
-        address.latitude ?? 0,
-        address.longitude ?? 0,
-        address.country,
-        address.state,
-        address.city ?? "",
-        address.zipCode ?? "",
-        shippingConfig,
-        warehouse.lat,
-        warehouse.lng,
-      )).shippingCharge;
+      if (shippingConfig.calculateShippingForCOD === false) {
+        shippingCharge = 0; // Shipping calculation disabled for Cash on Delivery → Free
+      } else {
+        shippingCharge = (await calculateShippingWithConfig(
+          address.latitude ?? 0,
+          address.longitude ?? 0,
+          address.country,
+          address.state,
+          address.city ?? "",
+          address.zipCode ?? "",
+          shippingConfig,
+          warehouse.lat,
+          warehouse.lng,
+        )).shippingCharge;
+      }
     } else {
       shippingCharge = 0; // Warehouse Settings disabled → free shipping
     }
@@ -583,7 +612,13 @@ export const placeOrderPOD = async (req: Request, res: Response) => {
 
       // Clear only the bought item (Buy Now) or the entire cart (regular checkout)
       if (buyNowProductId) {
-        await tx.cartItem.deleteMany({ where: { cart: { userId }, productId: buyNowProductId } });
+        await tx.cartItem.deleteMany({
+          where: {
+            cart: { userId },
+            productId: buyNowProductId,
+            ...(buyNowVariantId ? { variantId: buyNowVariantId } : {}),
+          },
+        });
       } else {
         await tx.cart.deleteMany({ where: { userId } });
       }
@@ -649,9 +684,10 @@ export const placeOrderPOD = async (req: Request, res: Response) => {
 export const placeOrderQR = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { couponId, buyNowProductId, transactionId } = req.body as {
+    const { couponId, buyNowProductId, buyNowVariantId, transactionId } = req.body as {
       couponId?: string;
       buyNowProductId?: string;
+      buyNowVariantId?: string;
       transactionId?: string;
     };
     const rawTxId = transactionId?.trim() ? transactionId.trim().replace(/[\s-]/g, "") : undefined;
@@ -709,7 +745,10 @@ export const placeOrderQR = async (req: Request, res: Response) => {
     }
 
     const eligibleItems = buyNowProductId
-      ? cart.items.filter((i: any) => i.product.id === buyNowProductId)
+      ? cart.items.filter((i: any) =>
+          i.product.id === buyNowProductId &&
+          (!buyNowVariantId || i.variantId === buyNowVariantId),
+        )
       : cart.items;
 
     if (eligibleItems.length === 0) {
@@ -734,17 +773,21 @@ export const placeOrderQR = async (req: Request, res: Response) => {
     let shippingCharge: number;
     if (warehouseFeatureEnabledQR) {
       const [warehouse, shippingConfig] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
-      shippingCharge = (await calculateShippingWithConfig(
-        address.latitude ?? 0,
-        address.longitude ?? 0,
-        address.country,
-        address.state,
-        address.city ?? "",
-        address.zipCode ?? "",
-        shippingConfig,
-        warehouse.lat,
-        warehouse.lng,
-      )).shippingCharge;
+      if (shippingConfig.calculateShippingForQR === false) {
+        shippingCharge = 0; // Shipping calculation disabled for QR Payments → Free
+      } else {
+        shippingCharge = (await calculateShippingWithConfig(
+          address.latitude ?? 0,
+          address.longitude ?? 0,
+          address.country,
+          address.state,
+          address.city ?? "",
+          address.zipCode ?? "",
+          shippingConfig,
+          warehouse.lat,
+          warehouse.lng,
+        )).shippingCharge;
+      }
     } else {
       shippingCharge = 0;
     }
@@ -797,7 +840,13 @@ export const placeOrderQR = async (req: Request, res: Response) => {
       await deductStock(orderItems, tx);
 
       if (buyNowProductId) {
-        await tx.cartItem.deleteMany({ where: { cart: { userId }, productId: buyNowProductId } });
+        await tx.cartItem.deleteMany({
+          where: {
+            cart: { userId },
+            productId: buyNowProductId,
+            ...(buyNowVariantId ? { variantId: buyNowVariantId } : {}),
+          },
+        });
       } else {
         await tx.cart.deleteMany({ where: { userId } });
       }
@@ -952,8 +1001,8 @@ export const refundOrder = async (req: Request, res: Response) => {
     if (order.paymentStatus !== "PAID") {
       return res.status(400).json({ message: "Only a PAID order's payment can be marked as refunded" });
     }
-    if (order.orderStatus !== "CANCELLED") {
-      return res.status(400).json({ message: "Cancel the order before recording a refund" });
+    if (order.orderStatus !== "CANCELLED" && order.orderStatus !== "RETURNED") {
+      return res.status(400).json({ message: "Cancel or return the order before recording a refund" });
     }
 
     // Compare-and-swap, same reasoning as cancelOrder/updateStatus above — a
@@ -1051,20 +1100,94 @@ export const getOrders = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/orders/admin?page=1&limit=20&status=  (admin)
+// GET /api/orders/admin?page=1&limit=20&status=&source=&placedBy=&search=  (admin/staff)
 export const getOrdersForAdmin = async (req: Request, res: Response) => {
   try {
-    const { page = "1", limit = "20", status } = req.query as Record<string, string | undefined>;
+    const { page = "1", limit = "20", status, source, placedBy, search, invoicePrinted } = req.query as Record<string, string | undefined>;
 
     const pageSize = Math.min(Math.max(parseInt(limit ?? "20") || 20, 1), 100);
     const skip = (Math.max(parseInt(page ?? "1") || 1, 1) - 1) * pageSize;
-    const where = status ? { orderStatus: status.toUpperCase() as OrderStatus } : {};
+    const where: any = {};
 
-    const [orders, total] = await Promise.all([
+    if (status) {
+      where.orderStatus = status.toUpperCase() as OrderStatus;
+    }
+
+    if (placedBy && placedBy.trim()) {
+      where.placedByAdminId = placedBy.trim();
+    } else if (source === "ADMIN" || source === "STAFF") {
+      where.placedByAdminId = { not: null };
+    } else if (source === "CUSTOMER") {
+      where.placedByAdminId = null;
+    }
+
+    if (invoicePrinted === "true") {
+      where.invoicePrinted = true;
+    } else if (invoicePrinted === "false") {
+      where.invoicePrinted = { not: true };
+      if (!status) {
+        where.orderStatus = { not: "CANCELLED" };
+      }
+    }
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      const escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(escapedQ, "i");
+
+      // Find matching users (customer username, email, phone)
+      const matchingUsers = await User.find({
+        $or: [
+          { username: { $regex: regex } },
+          { email: { $regex: regex } },
+          { phone: { $regex: regex } },
+        ],
+      }).select("_id").lean();
+      const matchedUserIds = matchingUsers.map((u: any) => u._id);
+
+      const orConditions: any[] = [
+        // Order ID partial match (supports short 6-8 char IDs or full 24-char ObjectId)
+        {
+          $expr: {
+            $regexMatch: {
+              input: { $toString: "$_id" },
+              regex: escapedQ,
+              options: "i",
+            },
+          },
+        },
+        // Shipping address search
+        { "shippingAddress.fullName": { contains: q, mode: "insensitive" } },
+        { "shippingAddress.name": { contains: q, mode: "insensitive" } },
+        { "shippingAddress.phone": { contains: q } },
+        { "shippingAddress.city": { contains: q, mode: "insensitive" } },
+        // Tracking & payment references
+        { trackingId: { contains: q, mode: "insensitive" } },
+        { deliveryPartnerName: { contains: q, mode: "insensitive" } },
+        { razorpayPaymentId: { contains: q, mode: "insensitive" } },
+        { transactionId: { contains: q, mode: "insensitive" } },
+      ];
+
+      // If matching users found, include orders for those users or placed by them
+      if (matchedUserIds.length > 0) {
+        orConditions.push({ userId: { in: matchedUserIds } });
+        orConditions.push({ placedByAdminId: { in: matchedUserIds } });
+      }
+
+      // If exact 24-hex string, also allow direct ObjectId match
+      if (mongoose.Types.ObjectId.isValid(q) && q.length === 24) {
+        orConditions.push({ id: q });
+      }
+
+      where.OR = orConditions;
+    }
+
+    const [orders, total, adminStaffList] = await Promise.all([
       prisma.order.findMany({
         where,
         include: {
           user: { select: { id: true, username: true, email: true, phone: true } },
+          placedByAdmin: { select: { id: true, username: true, email: true, role: true } },
           items: {
             include: {
               product: {
@@ -1080,11 +1203,39 @@ export const getOrdersForAdmin = async (req: Request, res: Response) => {
         take: pageSize,
       }),
       prisma.order.count({ where }),
+      prisma.user.findMany({
+        where: { role: { in: ["ADMIN", "SUPER_ADMIN", "STAFF"] } },
+        select: { id: true, username: true, email: true, role: true },
+        orderBy: { username: "asc" },
+      }),
     ]);
+
+    // Fallback lookup in case relation bridge missed any placedByAdminId
+    const missingAdminIds = orders
+      .filter((o: any) => o.placedByAdminId && !o.placedByAdmin)
+      .map((o: any) => o.placedByAdminId);
+
+    if (missingAdminIds.length > 0) {
+      const fallbackAdmins = await User.find({ _id: { $in: missingAdminIds } })
+        .select("_id username email role")
+        .lean();
+      const adminMap = Object.fromEntries(
+        (fallbackAdmins as any[]).map((u: any) => [
+          u._id.toString(),
+          { id: u._id.toString(), username: u.username, email: u.email ?? null, role: u.role ?? "ADMIN" },
+        ])
+      );
+      for (const o of orders as any[]) {
+        if (o.placedByAdminId && !o.placedByAdmin) {
+          o.placedByAdmin = adminMap[o.placedByAdminId.toString()] ?? null;
+        }
+      }
+    }
 
     res.status(200).json({
       message: "Orders fetched for Admin",
       order: orders,
+      adminStaffList,
       pagination: {
         total,
         page: Math.max(parseInt(page ?? "1") || 1, 1),
@@ -1115,6 +1266,10 @@ export const getOrderStats = async (_req: Request, res: Response) => {
           // face value of every order including cancelled/pending ones.
           paidRevenue: [{ $match: { paymentStatus: "PAID" } }, { $group: { _id: null, sum: { $sum: "$finalAmount" } } }],
           totalOrderValue: [{ $group: { _id: null, sum: { $sum: "$finalAmount" } } }],
+          unprintedCount: [
+            { $match: { invoicePrinted: { $ne: true }, orderStatus: { $ne: "CANCELLED" } } },
+            { $count: "n" },
+          ],
         },
       },
     ]);
@@ -1130,6 +1285,8 @@ export const getOrderStats = async (_req: Request, res: Response) => {
       shipped: byStatus.get("SHIPPED") ?? 0,
       delivered: byStatus.get("DELIVERED") ?? 0,
       cancelled: byStatus.get("CANCELLED") ?? 0,
+      returned: byStatus.get("RETURNED") ?? 0,
+      unprintedInvoices: facet?.unprintedCount?.[0]?.n ?? 0,
     });
   } catch (err: any) {
     logger.error("getOrderStats error", err);
@@ -1166,10 +1323,10 @@ export const updateStatus = async (req: Request, res: Response) => {
     });
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // DELIVERED is terminal (same as CANCELLED) and can only be reached from SHIPPED —
+    // DELIVERED, CANCELLED, and RETURNED are terminal states —
     // mirrors the frontend's chip-disabling in AdminOrderManagement.tsx, enforced here
     // too since this endpoint is reachable directly, not just through that UI.
-    if (order.orderStatus === "DELIVERED" || order.orderStatus === "CANCELLED") {
+    if (order.orderStatus === "DELIVERED" || order.orderStatus === "CANCELLED" || order.orderStatus === "RETURNED") {
       return res.status(400).json({ message: `Order #${id.slice(-6)} is already ${order.orderStatus.toLowerCase()} — no further status change is allowed.` });
     }
     if (orderStatus === "DELIVERED" && order.orderStatus !== "SHIPPED") {
@@ -1221,16 +1378,16 @@ export const updateStatus = async (req: Request, res: Response) => {
     }
 
     // Compare-and-swap: only the call that actually transitions the order into
-    // CANCELLED enqueues the stock restore — closes the same double-submit race as
-    // cancelOrder() above (an admin double-clicking "cancel", or two open tabs).
+    // CANCELLED or RETURNED enqueues the stock restore — closes the same double-submit race as
+    // cancelOrder() above (an admin double-clicking "cancel"/"return", or two open tabs).
     let updated;
-    if (orderStatus === "CANCELLED") {
+    if (orderStatus === "CANCELLED" || orderStatus === "RETURNED") {
       updated = await prisma.order.update({
-        where: { id, orderStatus: { not: "CANCELLED" } },
+        where: { id, orderStatus: { notIn: ["CANCELLED", "RETURNED"] } },
         data: { orderStatus },
       });
       if (!updated) {
-        return res.status(400).json({ message: "This order was already cancelled." });
+        return res.status(400).json({ message: `This order was already ${orderStatus.toLowerCase()}.` });
       }
       await restoreStock({
         orderId: id,
@@ -1240,11 +1397,15 @@ export const updateStatus = async (req: Request, res: Response) => {
         data: {
           orderId: id,
           userId: order.userId,
-          event: "ORDER_CANCELLED",
+          event: orderStatus === "RETURNED" ? "ORDER_RETURNED" : "ORDER_CANCELLED",
           paymentMethod: order.paymentMethod,
           paymentStatus: order.paymentStatus,
           amount: order.finalAmount,
-          gatewayResponse: { cancelledBy: adminId, self: false },
+          gatewayResponse: {
+            [orderStatus === "RETURNED" ? "returnedBy" : "cancelledBy"]: adminId,
+            self: false,
+            reason: orderStatus === "RETURNED" ? "Courier returned to origin before delivery" : undefined,
+          },
           signatureValid: null,
           ipAddress: req.ip ?? null,
         },
@@ -1466,6 +1627,7 @@ export const getOrderById = async (req: Request, res: Response) => {
       where: { id },
       include: {
         user: { select: { id: true, username: true, email: true, phone: true } },
+        placedByAdmin: { select: { id: true, username: true, email: true, role: true } },
         items: {
           include: {
             product: { select: { id: true, name: true, image: true, price: true, code: true } },
@@ -1476,6 +1638,18 @@ export const getOrderById = async (req: Request, res: Response) => {
         coupon: { select: { code: true, discountType: true, discountValue: true } },
       },
     });
+
+    if (order && (order as any).placedByAdminId && !(order as any).placedByAdmin) {
+      const adminDoc = await User.findById((order as any).placedByAdminId).select("_id username email role").lean();
+      if (adminDoc) {
+        (order as any).placedByAdmin = {
+          id: adminDoc._id.toString(),
+          username: adminDoc.username,
+          email: adminDoc.email ?? null,
+          role: adminDoc.role ?? "ADMIN",
+        };
+      }
+    }
 
     if (!order) return res.status(404).json({ message: "Order not found" });
 
@@ -1493,6 +1667,73 @@ export const getOrderById = async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error("getOrderById error", err);
     res.status(500).json({ message: "Error fetching order" });
+  }
+};
+
+// GET /api/orders/bulk-invoices  (admin/staff)
+export const getBulkInvoices = async (req: Request, res: Response) => {
+  try {
+    const { orderIds, unprintedOnly, limit = "100" } = req.query as Record<string, string | undefined>;
+    const where: any = {};
+
+    if (orderIds && orderIds.trim()) {
+      const ids = orderIds.split(",").map((s) => s.trim()).filter(Boolean);
+      where.id = { in: ids };
+    } else if (unprintedOnly === "true") {
+      where.invoicePrinted = { not: true };
+      where.orderStatus = { not: "CANCELLED" };
+    }
+
+    const maxLimit = Math.min(Math.max(parseInt(limit ?? "100") || 100, 1), 200);
+
+    const orders = await prisma.order.findMany({
+      where,
+      include: {
+        user: { select: { id: true, username: true, email: true, phone: true } },
+        placedByAdmin: { select: { id: true, username: true, email: true, role: true } },
+        items: {
+          include: {
+            product: { select: { id: true, name: true, image: true, price: true, code: true } },
+            variant: true,
+          },
+        },
+        coupon: { select: { code: true, discountType: true, discountValue: true } },
+      },
+      orderBy: { createdAt: "asc" }, // chronological order for batch packing/fulfillment
+      take: maxLimit,
+    });
+
+    res.status(200).json({ orders });
+  } catch (err: any) {
+    logger.error("getBulkInvoices error", err);
+    res.status(500).json({ message: "Error fetching bulk invoices" });
+  }
+};
+
+// POST /api/orders/mark-invoices-printed  (admin/staff)
+export const markInvoicesPrinted = async (req: Request, res: Response) => {
+  try {
+    const { orderIds, printed = true } = req.body;
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ message: "orderIds array is required" });
+    }
+
+    const updateData = printed
+      ? { invoicePrinted: true, invoicePrintedAt: new Date() }
+      : { invoicePrinted: false, invoicePrintedAt: null };
+
+    const result = await Order.updateMany(
+      { _id: { $in: orderIds } },
+      { $set: updateData }
+    );
+
+    res.status(200).json({
+      message: `Successfully marked ${result.modifiedCount} order(s) as ${printed ? "printed" : "unprinted"}`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err: any) {
+    logger.error("markInvoicesPrinted error", err);
+    res.status(500).json({ message: "Error updating invoice print status" });
   }
 };
 
@@ -1796,3 +2037,115 @@ export const placeAdminOrder = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to place order", error: err.message });
   }
 };
+
+// GET /api/orders/admin-order/lookup-pincode/:pincode  (admin / super-admin / staff)
+// Resolves 6-digit Indian PIN code to City / District and State
+export const lookupPincode = async (req: Request, res: Response) => {
+  const pincode = String(req.params.pincode || req.query.pincode || "").trim();
+  const cleanPin = pincode.replace(/\D/g, "").slice(0, 6);
+  if (cleanPin.length !== 6) {
+    return res.status(400).json({ success: false, message: "Invalid 6-digit PIN code" });
+  }
+
+  // 1. Try Nominatim (OpenStreetMap) with User-Agent header and 4s timeout
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const osmRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?postalcode=${cleanPin}&country=India&format=json&addressdetails=1`,
+      {
+        headers: { "User-Agent": "StorraApp/1.0 (contact@storra.com)" },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeout);
+    if (osmRes.ok) {
+      const data: any = await osmRes.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const addr = data[0].address || {};
+        const district = addr.state_district || addr.county || "";
+        let city = addr.city || addr.town || addr.village || district || "";
+        if (city.toLowerCase().includes("corporation") && district) {
+          city = district;
+        }
+        city = city.replace(/\s+District$/i, "").trim();
+        const state = (addr.state || "").trim();
+        if (city || state) {
+          return res.json({ success: true, city: city || district, district, state });
+        }
+      }
+    }
+  } catch {
+    // Continue to fallback
+  }
+
+  // 2. Try postalpincode.in with 3s timeout
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const postRes = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (postRes.ok) {
+      const postData: any = await postRes.json();
+      if (postData && postData[0] && postData[0].Status === "Success") {
+        const postOffices = postData[0].PostOffice || [];
+        if (postOffices.length > 0) {
+          const po = postOffices[0];
+          const fetchedDistrict = (po.District && po.District !== "NA") ? po.District : "";
+          const fetchedCity = fetchedDistrict || po.Block || po.Name || "";
+          const fetchedState = po.State || "";
+          return res.json({ success: true, city: fetchedCity, district: fetchedDistrict, state: fetchedState });
+        }
+      }
+    }
+  } catch {
+    // Continue to fallback
+  }
+
+  // 3. Try zippopotam with 3s timeout
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const zipRes = await fetch(`https://api.zippopotam.us/in/${cleanPin}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (zipRes.ok) {
+      const zipData: any = await zipRes.json();
+      if (zipData && Array.isArray(zipData.places) && zipData.places.length > 0) {
+        const place = zipData.places[0];
+        return res.json({
+          success: true,
+          city: place["place name"] || "",
+          district: place["place name"] || "",
+          state: place.state || "",
+        });
+      }
+    }
+  } catch {
+    // All sources exhausted
+  }
+
+  return res.status(404).json({ success: false, message: "Location not found for this PIN code" });
+};
+
+// GET /api/order/shipping-toggles (authenticated customer / admin / staff)
+export const getShippingToggles = async (_req: Request, res: Response) => {
+  try {
+    const config = await getShippingConfigFromDB();
+    res.json({
+      calculateShippingForCOD: config.calculateShippingForCOD !== false,
+      calculateShippingForOnline: config.calculateShippingForOnline !== false,
+      calculateShippingForQR: config.calculateShippingForQR !== false,
+    });
+  } catch {
+    res.json({
+      calculateShippingForCOD: true,
+      calculateShippingForOnline: true,
+      calculateShippingForQR: true,
+    });
+  }
+};
+

@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
+import multer from "multer";
 import logger from "../utils/logger";
 import { AppError } from "../utils/AppError";
 
@@ -21,6 +22,20 @@ export const errorHandler = (
     url: req.url,
     method: req.method,
   });
+
+  // Multer errors (e.g. file size exceeded)
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      const isScreenshot = req.originalUrl?.includes("placeOrderQR");
+      const limitMsg = isScreenshot
+        ? "Payment screenshot must be less than 5 MB."
+        : "Please add image below 1 MB.";
+      res.status(400).json({ message: limitMsg });
+      return;
+    }
+    res.status(400).json({ message: err.message });
+    return;
+  }
 
   // Known operational errors (e.g. throw new AppError(404, 'Product not found'))
   if (err instanceof AppError) {

@@ -149,7 +149,7 @@ export const getRevenueByDay = async (req: Request, res: Response) => {
 // so this stays consistent with the rest of the page's date-scoped widgets.
 export const getOrderStatusBreakdown = async (req: Request, res: Response) => {
   try {
-    const statuses = ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
+    const statuses = ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"] as const;
     const { from, to } = req.query as Record<string, string | undefined>;
     const { fromDate, toDate } = parseDateRange(from, to);
     const dateMatch: Record<string, unknown> = {};
@@ -245,7 +245,7 @@ export const getTopCategories = async (req: Request, res: Response) => {
         },
       },
       { $sort: { revenue: -1 } },
-      { $limit: 8 },
+      { $limit: 30 },
       { $lookup: { from: "categories", localField: "_id", foreignField: "_id", as: "category" } },
       { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
       {
@@ -684,10 +684,10 @@ export const getCustomerInsights = async (req: Request, res: Response) => {
     const newCount = perCustomer.filter((c) => !c.isReturning).length;
     const returningCount = perCustomer.filter((c) => c.isReturning).length;
 
-    const topCustomerIds = perCustomer.slice(0, 8).map((c) => c._id).filter(Boolean);
+    const topCustomerIds = perCustomer.slice(0, 30).map((c) => c._id).filter(Boolean);
     const users = await User.find({ _id: { $in: topCustomerIds } }).select("username email").lean();
     const userById = new Map(users.map((u: any) => [String(u._id), u]));
-    const topCustomers = perCustomer.slice(0, 8).map((c) => ({
+    const topCustomers = perCustomer.slice(0, 30).map((c) => ({
       id: c._id ? String(c._id) : null,
       username: c._id ? (userById.get(String(c._id)) as any)?.username ?? "Unknown" : "Guest",
       email: c._id ? (userById.get(String(c._id)) as any)?.email ?? "" : "",
@@ -704,7 +704,7 @@ export const getCustomerInsights = async (req: Request, res: Response) => {
 };
 
 // ── GET /api/analytics/sales-by-location?from=YYYY-MM-DD&to=YYYY-MM-DD ────
-// Revenue by shipping state — top 8. from/to optional (all-time when omitted).
+// Revenue by shipping state. from/to optional (all-time when omitted).
 export const getSalesByLocation = async (req: Request, res: Response) => {
   try {
     const { from, to } = req.query as Record<string, string | undefined>;
@@ -724,7 +724,7 @@ export const getSalesByLocation = async (req: Request, res: Response) => {
         },
       },
       { $sort: { revenue: -1 } },
-      { $limit: 8 },
+      { $limit: 30 },
       { $project: { _id: 0, state: "$_id", revenue: 1, orders: 1 } },
     ]);
 

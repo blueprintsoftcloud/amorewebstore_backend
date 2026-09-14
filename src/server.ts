@@ -67,6 +67,7 @@ app.get("/health", (req, res) => {
 app.use(
   helmet({
     contentSecurityPolicy: false,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     // This app is deliberately cross-origin (frontend and API run on different
     // origins — see the CORS allowlist below) and serves images from /uploads that
     // the frontend loads directly. Helmet's default "same-origin" CORP would block

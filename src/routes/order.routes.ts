@@ -17,6 +17,10 @@ import {
   searchCustomersForOrder,
   getProductsForAdminOrder,
   placeAdminOrder,
+  getBulkInvoices,
+  markInvoicesPrinted,
+  lookupPincode,
+  getShippingToggles,
 } from "../controllers/order.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { uploadScreenshot } from "../middleware/upload";
@@ -36,6 +40,7 @@ router.post("/cancel/:id", authMiddleware, cancelOrder);
 router.post("/pre-checkout", authMiddleware, preCheckout);
 router.get("/myOrders", authMiddleware, getOrders);
 router.get("/my-transactions", authMiddleware, getMyTransactions);
+router.get("/shipping-toggles", authMiddleware, getShippingToggles);
 
 // Admin/Staff routes — must be declared before /:id to avoid wildcard conflict
 // AdminOrderManagement.tsx (the page these two back) is reachable by a staff member with
@@ -48,6 +53,8 @@ router.get("/my-transactions", authMiddleware, getMyTransactions);
 // ORDER_UPDATE implies enough access to view the list too.
 router.get("/all", authMiddleware, adminOrStaff(["ORDER_VIEW", "ORDER_UPDATE"]), getOrdersForAdmin);
 router.get("/stats", authMiddleware, adminOrStaff(["ORDER_VIEW", "ORDER_UPDATE"]), getOrderStats);
+router.get("/bulk-invoices", authMiddleware, adminOrStaff(["ORDER_VIEW", "ORDER_UPDATE"]), getBulkInvoices);
+router.post("/mark-invoices-printed", authMiddleware, adminOrStaff(["ORDER_VIEW", "ORDER_UPDATE"]), markInvoicesPrinted);
 router.get("/customer-transactions", authMiddleware, adminOrStaff("ORDER_VIEW"), getCustomerTransactions);
 router.put("/update/:id", authMiddleware, adminOrStaff("ORDER_UPDATE"), validate(updateOrderStatusSchema), updateStatus);
 router.patch("/:id/refund", authMiddleware, adminOrStaff("ORDER_UPDATE"), refundOrder);
@@ -56,6 +63,7 @@ router.patch("/:id/refund", authMiddleware, adminOrStaff("ORDER_UPDATE"), refund
 router.get("/admin-order/search-customers", authMiddleware, adminOrSuperAdmin, searchCustomersForOrder);
 router.get("/admin-order/products", authMiddleware, adminOrSuperAdmin, getProductsForAdminOrder);
 router.post("/admin-order/place", authMiddleware, adminOrSuperAdmin, placeAdminOrder);
+router.get("/admin-order/lookup-pincode/:pincode", authMiddleware, adminOrSuperAdmin, lookupPincode);
 
 router.get("/:id", authMiddleware, getOrderById); // single order — customer (own) or admin/staff
 

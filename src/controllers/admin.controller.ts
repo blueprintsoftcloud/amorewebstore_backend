@@ -214,6 +214,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
       shippedCount,
       deliveredCount,
       cancelledCount,
+      returnedCount,
       // Low stock products
       lowStockProducts,
       // Recent orders
@@ -257,18 +258,19 @@ export const getDashboardData = async (req: Request, res: Response) => {
       Order.countDocuments({ orderStatus: "SHIPPED" }),
       Order.countDocuments({ orderStatus: "DELIVERED" }),
       Order.countDocuments({ orderStatus: "CANCELLED" }),
+      Order.countDocuments({ orderStatus: "RETURNED" }),
       // Low stock: products with stock <= 10, ordered by stock asc
       Product.find({ stock: { $lte: 10 } })
         .select('id name stock image')
         .populate('categoryId', 'name')
         .sort({ stock: 1 })
-        .limit(8),
+        .limit(50),
       // Recent orders
       Order.find()
         .select('id finalAmount orderStatus paymentStatus paymentMethod createdAt shippingAddress')
         .populate('userId', 'username email')
         .sort({ createdAt: -1 })
-        .limit(8),
+        .limit(20),
       // Payment methods — now scoped to the selected range, same as the summary cards.
       Order.aggregate([{ $match: { paymentMethod: "ONLINE", ...totalDateFilter } }, { $group: { _id: null, total: { $sum: "$finalAmount" }, count: { $sum: 1 } } }]),
       Order.aggregate([{ $match: { paymentMethod: "POD", ...totalDateFilter } }, { $group: { _id: null, total: { $sum: "$finalAmount" }, count: { $sum: 1 } } }]),
@@ -293,7 +295,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
         { $unwind: "$category" },
         { $project: { _id: 0, id: "$_id", name: "$category.name", revenue: 1, unitsSold: 1 } },
         { $sort: { revenue: -1 } },
-        { $limit: 6 },
+        { $limit: 20 },
       ]),
       // Top products by revenue — also scoped to PAID + the selected range now (previously
       // matched on OrderItem directly with no join at all, so it silently counted items
@@ -304,7 +306,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
         { $match: { "order.paymentStatus": "PAID", ...orderDateMatch } },
         { $group: { _id: "$productId", totalPrice: { $sum: { $multiply: ["$price", "$quantity"] } }, totalQuantity: { $sum: "$quantity" } } },
         { $sort: { totalPrice: -1 } },
-        { $limit: 5 }
+        { $limit: 20 }
       ]),
     ]);
 
@@ -374,6 +376,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
         { status: "SHIPPED", count: shippedCount },
         { status: "DELIVERED", count: deliveredCount },
         { status: "CANCELLED", count: cancelledCount },
+        { status: "RETURNED", count: returnedCount },
       ].filter((s) => s.count > 0),
       topCategories,
       topProducts,
