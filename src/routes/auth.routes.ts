@@ -9,6 +9,7 @@ import {
   mobileLogin,
   registerCustomer,
   checkPhoneExists,
+  getMsg91WidgetConfig,
 } from "../controllers/auth.controller";
 import {
   forgotPassword,
@@ -81,5 +82,6 @@ router.get("/status", (req, res) => {
 router.post("/mobile/check-phone", otpLimiter, validate(checkPhoneSchema), checkPhoneExists);
 router.post("/mobile/login", otpLimiter, validate(mobileLoginSchema), mobileLogin);
 router.post("/mobile/register", otpLimiter, validate(mobileRegisterSchema), registerCustomer);
+router.get("/mobile/widget-config", getMsg91WidgetConfig);
 
 export default router;

@@ -536,4 +536,13 @@ export const checkPhoneExists = async (req: Request, res: Response) => {
   }
 };
 
+// GET /api/auth/mobile/widget-config
+// Exposes client-side public MSG91 widget configuration to the browser
+export const getMsg91WidgetConfig = async (_req: Request, res: Response) => {
+  return res.status(200).json({
+    widgetId: env.MSG91_WIDGET_ID || "",
+    tokenAuth: env.MSG91_TOKEN_AUTH || "",
+  });
+};
+
 
