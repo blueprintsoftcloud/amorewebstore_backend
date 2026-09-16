@@ -206,7 +206,13 @@ const candidateStaticDirs = [
 ];
 for (const dir of candidateStaticDirs) {
   if (fs.existsSync(dir)) {
-    app.use(express.static(dir));
+    app.use(
+      express.static(dir, {
+        index: false,
+        maxAge: "1y",
+        immutable: true,
+      }),
+    );
   }
 }
 

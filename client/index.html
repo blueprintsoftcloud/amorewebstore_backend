@@ -2,7 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link id="app-favicon" rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <script>
+      (function() {
+        try {
+          var cache = localStorage.getItem("crm_branding_cache");
+          if (cache) {
+            var data = JSON.parse(cache);
+            if (data && data.companyName) {
+              document.title = data.companyName;
+            }
+            if (data && data.companyFavicon) {
+              var existingIcons = document.querySelectorAll("link[rel*='icon']");
+              for (var i = 0; i < existingIcons.length; i++) {
+                existingIcons[i].parentNode.removeChild(existingIcons[i]);
+              }
+              var link = document.createElement("link");
+              link.id = "app-favicon";
+              link.rel = "icon";
+              link.href = data.companyFavicon;
+              document.head.appendChild(link);
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link id="app-favicon" rel="icon" href="/vite.svg" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -10,30 +34,8 @@
          overrides these via react-helmet-async (see PageSeo.tsx) once React mounts. -->
     <meta name="description" content="Shop online — quality products, fast delivery." />
     <meta property="og:type" content="website" />
-    <title>Online Store</title>
-    <script>
-      (function() {
-        try {
-          var cache = localStorage.getItem("crm_branding_cache");
-          if (cache) {
-            var data = JSON.parse(cache);
-            if (data.companyName) {
-              document.title = data.companyName;
-            }
-            if (data.companyFavicon) {
-              var link = document.getElementById("app-favicon") || document.querySelector("link[rel='icon']") || document.querySelector("link[rel='shortcut icon']");
-              if (link) {
-                var absoluteFaviconUrl = new URL(data.companyFavicon, window.location.origin).href;
-                if (link.href !== absoluteFaviconUrl) {
-                  link.href = data.companyFavicon;
-                }
-              }
-            }
-          }
-        } catch (e) {}
-      })();
-    </script>
-    <script type="module" crossorigin src="/assets/index-BT7HdR5f.js"></script>
+    <title>Store</title>
+    <script type="module" crossorigin src="/assets/index-CCtPrIxs.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-CVbc_K37.css">
   </head>
   <body>

@@ -91,7 +91,7 @@ const fetchBrandingData = async (): Promise<BrandingSeoCache> => {
   }
 
   const defaultData: BrandingSeoCache = {
-    companyName: "Amore Webstore",
+    companyName: "Store",
     companyTagline: "Shop online — quality products, fast delivery.",
     companyLogo: "",
     companyFavicon: "/vite.svg",
@@ -271,6 +271,11 @@ export const serveDynamicHtml = async (req: Request, res: Response): Promise<voi
     res.status(404).type("text/plain").send("Asset not found");
     return;
   }
+
+  // Prevent stale index.html caching on client devices so new deployments never white-screen
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 
   try {
     const rendered = await renderDynamicHtml();
