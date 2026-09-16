@@ -5,6 +5,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import path from "path";
+import fs from "fs";
 
 import { env } from "./config/env";
 import "./config/prisma";
@@ -193,7 +194,21 @@ app.get("/sitemap.xml", getSitemap);
 app.get("/robots.txt", getRobotsTxt);
 
 // ── Serve React Frontend ───────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, "../client")));
+const candidateStaticDirs = [
+  path.join(__dirname, "../../client"),
+  path.join(__dirname, "../client"),
+  path.join(process.cwd(), "client"),
+  path.join(process.cwd(), "dist/client"),
+  path.join(process.cwd(), "backend/client"),
+  path.join(process.cwd(), "../frontend/dist"),
+  path.join(__dirname, "../../../frontend/dist"),
+  path.join(__dirname, "../../frontend/dist"),
+];
+for (const dir of candidateStaticDirs) {
+  if (fs.existsSync(dir)) {
+    app.use(express.static(dir));
+  }
+}
 
 // ── React Router Catch-all (Dynamic Branding & SEO Injection) ──────────────
 app.get("*splat", (req, res) => {

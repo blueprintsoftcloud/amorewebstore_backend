@@ -6,6 +6,7 @@
 import { Request, Response } from "express";
 import fs from "fs";
 import path from "path";
+import { AppSetting } from "../models/mongoose";
 import logger from "./logger";
 
 interface BrandingSeoCache {
@@ -29,11 +30,17 @@ export const invalidateHtmlBrandingCache = (): void => {
   memoryCache = null;
 };
 
-// Candidate paths where index.html may reside
-const CANDIDATE_INDEX_PATHS = [
+// Candidate paths where index.html may reside across dev, prod, and various deploy setups
+const getCandidateIndexPaths = (): string[] => [
+  path.join(__dirname, "../../client/index.html"),
   path.join(__dirname, "../client/index.html"),
-  path.join(__dirname, "../dist/index.html"),
+  path.join(process.cwd(), "client/index.html"),
+  path.join(process.cwd(), "dist/client/index.html"),
+  path.join(process.cwd(), "backend/client/index.html"),
+  path.join(process.cwd(), "../frontend/dist/index.html"),
+  path.join(__dirname, "../../../frontend/dist/index.html"),
   path.join(__dirname, "../../frontend/dist/index.html"),
+  path.join(__dirname, "../dist/index.html"),
   path.join(__dirname, "../index.html"),
 ];
 
@@ -46,7 +53,8 @@ const getRawHtmlTemplate = (): string | null => {
   }
 
   // Find existing index.html
-  for (const p of CANDIDATE_INDEX_PATHS) {
+  const candidates = getCandidateIndexPaths();
+  for (const p of candidates) {
     if (fs.existsSync(p)) {
       resolvedIndexPath = p;
       try {
@@ -111,9 +119,7 @@ const fetchBrandingData = async (): Promise<BrandingSeoCache> => {
       "META_PIXEL_ID",
     ];
 
-    const rows = (await prisma.appSetting.findMany({
-      where: { key: { in: keys } },
-    })) || [];
+    const rows = (await AppSetting.find({ key: { $in: keys } }).lean()) || [];
 
     const map: Record<string, string> = {};
     for (const r of rows) {
@@ -256,6 +262,16 @@ export const renderDynamicHtml = async (): Promise<string | null> => {
 };
 
 export const serveDynamicHtml = async (req: Request, res: Response): Promise<void> => {
+  // If the request was for an asset that reached this catch-all, return a clean 404
+  // so browsers don't try to parse HTML or JSON error responses as CSS/JS.
+  if (
+    req.path.startsWith("/assets/") ||
+    /\.(js|css|map|png|jpg|jpeg|svg|ico|webp|woff|woff2|ttf)$/i.test(req.path)
+  ) {
+    res.status(404).type("text/plain").send("Asset not found");
+    return;
+  }
+
   try {
     const rendered = await renderDynamicHtml();
     if (rendered) {
@@ -267,10 +283,11 @@ export const serveDynamicHtml = async (req: Request, res: Response): Promise<voi
   }
 
   // Fallback to plain sendFile if rendering failed
-  const fallbackPath = resolvedIndexPath || CANDIDATE_INDEX_PATHS[0];
-  if (fs.existsSync(fallbackPath)) {
+  const candidates = getCandidateIndexPaths();
+  const fallbackPath = resolvedIndexPath || candidates.find((p) => fs.existsSync(p));
+  if (fallbackPath && fs.existsSync(fallbackPath)) {
     res.sendFile(fallbackPath);
   } else {
-    res.status(404).send("Application frontend not found.");
+    res.status(404).type("text/plain").send("Application frontend not found.");
   }
 };
