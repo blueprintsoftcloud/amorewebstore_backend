@@ -71,3 +71,27 @@ export const authMiddleware = async (
     });
   }
 };
+
+/**
+ * Attaches req.user if a valid token is present in cookies,
+ * but does not reject the request if token is missing or expired.
+ */
+export const optionalAuthMiddleware = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const token = req.cookies?.jwt as string | undefined;
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    req.user = decoded;
+  } catch {
+    // Ignore invalid/expired token for optional auth
+  }
+  next();
+};

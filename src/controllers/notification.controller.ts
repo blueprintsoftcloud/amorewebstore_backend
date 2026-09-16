@@ -104,7 +104,7 @@ export const getUserNotifications = async (req: Request, res: Response) => {
         order: { select: { id: true, finalAmount: true, orderStatus: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 50,
     });
     res.status(200).json(notifications);
   } catch (err: any) {

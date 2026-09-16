@@ -953,6 +953,114 @@ CustomerTrackerSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24
 
 export const CustomerTracker = mongoose.model<ICustomerTracker>('CustomerTracker', CustomerTrackerSchema);
 
+// ───────────────────────────── PURCHASE SURVEY CONFIG ───────────────────────────────
+
+export interface IPurchaseSurveyConfig extends Document {
+  isEnabled: boolean;
+  headerTitle: string;
+  urgencyBanner: string;
+  question: string;
+  options: string[];
+  allowCustomNote: boolean;
+  customNotePlaceholder: string;
+  skipButtonText: string;
+  submitButtonText: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const PurchaseSurveyConfigSchema = new Schema<IPurchaseSurveyConfig>(
+  {
+    isEnabled: { type: Boolean, default: true },
+    headerTitle: { type: String, default: 'Sorry To See You Go..' },
+    urgencyBanner: { type: String, default: ' Products In huge demand might run Out of Stock' },
+    question: { type: String, default: 'What stopped you from completing your purchase?' },
+    options: {
+      type: [String],
+      default: [
+        'Found a better deal elsewhere',
+        'Technical issues with the website',
+        'I changed my mind',
+        'Have issues with coupons',
+        'Shipping charge too high',
+        'Delivery takes too long',
+      ],
+    },
+    allowCustomNote: { type: Boolean, default: true },
+    customNotePlaceholder: { type: String, default: 'Others (please specify)' },
+    skipButtonText: { type: String, default: 'Skip and exit' },
+    submitButtonText: { type: String, default: 'Submit Feedback' },
+  },
+  { timestamps: true }
+);
+
+export const PurchaseSurveyConfig = mongoose.model<IPurchaseSurveyConfig>(
+  'PurchaseSurveyConfig',
+  PurchaseSurveyConfigSchema
+);
+
+// ───────────────────────────── CANCELLATION FEEDBACK ───────────────────────────────
+
+export interface ICancellationFeedbackItem {
+  productId?: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image?: string;
+  variant?: string;
+}
+
+export interface ICancellationFeedback extends Document {
+  userId?: mongoose.Types.ObjectId;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  paymentMethod: string;
+  triggerSource: string;
+  orderId?: mongoose.Types.ObjectId;
+  items: ICancellationFeedbackItem[];
+  totalAmount: number;
+  selectedReasons: string[];
+  customNote?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const CancellationFeedbackSchema = new Schema<ICancellationFeedback>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: false },
+    customerName: { type: String, default: 'Guest Customer' },
+    customerEmail: { type: String, default: '' },
+    customerPhone: { type: String, default: '' },
+    paymentMethod: { type: String, default: 'ONLINE' },
+    triggerSource: { type: String, default: 'CHECKOUT_CANCELLED' },
+    orderId: { type: Schema.Types.ObjectId, ref: 'Order', required: false },
+    items: [
+      {
+        productId: { type: String },
+        name: { type: String, required: true },
+        price: { type: Number, required: true },
+        quantity: { type: Number, default: 1 },
+        image: { type: String },
+        variant: { type: String },
+      },
+    ],
+    totalAmount: { type: Number, default: 0 },
+    selectedReasons: { type: [String], default: [] },
+    customNote: { type: String, default: '' },
+  },
+  { timestamps: true }
+);
+
+CancellationFeedbackSchema.index({ createdAt: -1 });
+CancellationFeedbackSchema.index({ userId: 1 });
+CancellationFeedbackSchema.index({ triggerSource: 1 });
+
+export const CancellationFeedback = mongoose.model<ICancellationFeedback>(
+  'CancellationFeedback',
+  CancellationFeedbackSchema
+);
+
 // ── Aliases ───────────────────────────────────────────────────────────────────
 export const Attribute = CategoryAttribute;
 export const AttributeValue = CategoryAttributeValue;

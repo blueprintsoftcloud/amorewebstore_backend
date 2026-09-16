@@ -3,6 +3,7 @@ import { CompanySettings } from "../models/mongoose";
 import { uploadToCloudinary, deleteFromCloudinary } from "../config/cloudinary";
 import logger from "../utils/logger";
 import { createAuditLog } from "../utils/auditLog";
+import { invalidateHtmlBrandingCache } from "../utils/htmlRenderer";
 
 const KEYS = [
   "COMPANY_NAME", "COMPANY_TAGLINE", "COMPANY_LOGO", "COMPANY_FAVICON",
@@ -13,7 +14,7 @@ const KEYS = [
   // SEO settings — see updateCompanySettings below. All optional; a fresh install with
   // none of these set falls back to sensible per-page defaults on the frontend.
   "SEO_TITLE_TEMPLATE", "SEO_DEFAULT_DESCRIPTION", "SEO_DEFAULT_OG_IMAGE", "SEO_KEYWORDS",
-  "SEO_GOOGLE_SITE_VERIFICATION", "SEO_GA_MEASUREMENT_ID", "SEO_ROBOTS_EXTRA",
+  "SEO_GOOGLE_SITE_VERIFICATION", "SEO_GA_MEASUREMENT_ID", "META_PIXEL_ID", "SEO_ROBOTS_EXTRA",
   "SEO_ORG_TYPE", "SEO_ORG_ADDRESS", "SEO_ORG_PHONE", "SEO_ORG_EMAIL", "SEO_SOCIAL_LINKS",
   "SEO_HOME_TITLE", "SEO_HOME_DESCRIPTION", "SEO_PRODUCTS_TITLE", "SEO_PRODUCTS_DESCRIPTION",
   // Contact Us page intro line — the rest of that page (address/phone/email) reuses the
@@ -476,6 +477,7 @@ export const updateCompanySettings = async (req: Request, res: Response) => {
       seoKeywords,
       seoGoogleSiteVerification,
       seoGaMeasurementId,
+      metaPixelId,
       seoRobotsExtra,
       seoOrgType,
       seoOrgAddress,
@@ -515,6 +517,7 @@ export const updateCompanySettings = async (req: Request, res: Response) => {
       seoKeywords?: string;
       seoGoogleSiteVerification?: string;
       seoGaMeasurementId?: string;
+      metaPixelId?: string;
       /** Extra raw lines appended verbatim to the generated /robots.txt. */
       seoRobotsExtra?: string;
       /** schema.org Organization subtype, e.g. "Organization" or "ClothingStore". */
@@ -613,7 +616,7 @@ export const updateCompanySettings = async (req: Request, res: Response) => {
       updates.push({ key: "SHOW_COMPANY_TAGLINE", value: String(showCompanyTagline) });
     }
     if (announcementBar !== undefined) {
-      updates.push({ key: "ANNOUNCEMENT_BAR", value: announcementBar });
+      updates.push({ key: "ANNOUNCEMENT_BAR", value: announcementBar.trim() });
     }
     if (invoiceFormat !== undefined) {
       updates.push({ key: "INVOICE_FORMAT", value: invoiceFormat });
@@ -643,6 +646,7 @@ export const updateCompanySettings = async (req: Request, res: Response) => {
       ["SEO_KEYWORDS", seoKeywords],
       ["SEO_GOOGLE_SITE_VERIFICATION", seoGoogleSiteVerification],
       ["SEO_GA_MEASUREMENT_ID", seoGaMeasurementId],
+      ["META_PIXEL_ID", metaPixelId],
       ["SEO_ROBOTS_EXTRA", seoRobotsExtra],
       ["SEO_ORG_TYPE", seoOrgType],
       ["SEO_ORG_ADDRESS", seoOrgAddress],
@@ -690,6 +694,7 @@ export const updateCompanySettings = async (req: Request, res: Response) => {
       SEO_KEYWORDS: null,
       SEO_GOOGLE_SITE_VERIFICATION: null,
       SEO_GA_MEASUREMENT_ID: null,
+      META_PIXEL_ID: null,
       SEO_ROBOTS_EXTRA: null,
       SEO_ORG_TYPE: null,
       SEO_ORG_ADDRESS: null,
@@ -710,6 +715,8 @@ export const updateCompanySettings = async (req: Request, res: Response) => {
       entity: "AppSetting",
       details: { changedKeys: updates.map((u) => u.key) },
     });
+
+    invalidateHtmlBrandingCache();
 
     res.status(200).json({ message: "Company settings updated", settings });
   } catch (err: any) {

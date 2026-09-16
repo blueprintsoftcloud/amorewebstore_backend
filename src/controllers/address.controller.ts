@@ -48,15 +48,37 @@ export const saveLocationAndGetShipping = async (req: Request, res: Response) =>
       return res.status(400).json({ message: "latitude and longitude are required" });
     }
 
-    const geoResponse = await geocoder.reverse({ lat: latitude, lon: longitude });
-    if (!geoResponse.length) {
-      return res.status(400).json({ message: "Address not found for these coordinates" });
+    let geoResponse;
+    try {
+      geoResponse = await geocoder.reverse({ lat: latitude, lon: longitude });
+      if (!geoResponse.length) {
+        return res.status(400).json({ message: "No delivery address found for these coordinates (ocean or water area). Please select a location on land in India." });
+      }
+      const data = geoResponse[0];
+      const countryName = (data.country || "").trim();
+      const countryCode = (data.countryCode || "").trim().toUpperCase();
+
+      if (
+        (countryCode && countryCode !== "IN") ||
+        (countryName && countryName.toLowerCase() !== "india") ||
+        (!countryName && !countryCode) ||
+        (!data.state && !data.city && !data.zipcode)
+      ) {
+        return res.status(400).json({
+          message: `Delivery is only available within India.${countryName && countryName.toLowerCase() !== "india" ? ` Selected location is in ${countryName}.` : " Please click on land in India."}`,
+        });
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes("Delivery is only available")) {
+        return res.status(400).json({ message: err.message });
+      }
+      return res.status(400).json({ message: "No delivery address found for these coordinates (ocean/water area). Please select a location on land in India." });
     }
     const data = geoResponse[0];
 
     const [warehouse, config] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
     const shippingResult = await calculateShippingWithConfig(
-      latitude, longitude, data.country ?? "", data.state ?? "", data.city ?? "", data.zipcode ?? "", config, warehouse.lat, warehouse.lng,
+      latitude, longitude, "India", data.state ?? "", data.city ?? "", data.zipcode ?? "", config, warehouse.lat, warehouse.lng,
     );
     const shippingCharge = shippingResult.shippingCharge;
     const distanceKm = shippingResult.distanceKm;
@@ -65,7 +87,7 @@ export const saveLocationAndGetShipping = async (req: Request, res: Response) =>
     const cityVal = data.city ?? "";
     const stateVal = data.state ?? "";
     const zipCodeVal = data.zipcode ?? "";
-    const countryVal = data.country ?? "India";
+    const countryVal = "India";
     const addressData = {
       userId,
       fullAddress: cleanStreetAddress(data.formattedAddress ?? "", cityVal, stateVal, zipCodeVal, countryVal),
@@ -97,15 +119,19 @@ export const saveLocationAndGetShipping = async (req: Request, res: Response) =>
 // POST /api/address/save-manual  (authenticated)
 export const saveManualAddress = async (req: Request, res: Response) => {
   try {
-    const { fullAddress, city, state, zipCode, country = "India" } = req.body;
+    const { fullAddress, city, state, zipCode, country = "India", latitude, longitude } = req.body;
     const userId = req.user!.id;
 
     if (!fullAddress || !city || !zipCode) {
       return res.status(400).json({ message: "fullAddress, city, and zipCode are required" });
     }
 
+    const existingDefault = await Address.findOne({ userId, isDefault: true });
+    const lat = typeof latitude === "number" ? latitude : (existingDefault?.latitude ?? null);
+    const lng = typeof longitude === "number" ? longitude : (existingDefault?.longitude ?? null);
+
     const [warehouse, config] = await Promise.all([getWarehouseCoords(), getShippingConfigFromDB()]);
-    const shippingCharge = (await calculateShippingWithConfig(0, 0, country, state ?? "", city ?? "", zipCode, config, warehouse.lat, warehouse.lng)).shippingCharge;
+    const shippingCharge = (await calculateShippingWithConfig(lat ?? 0, lng ?? 0, country, state ?? "", city ?? "", zipCode, config, warehouse.lat, warehouse.lng)).shippingCharge;
 
     const toggles = {
       calculateShippingForCOD: config.calculateShippingForCOD !== false,
@@ -113,10 +139,16 @@ export const saveManualAddress = async (req: Request, res: Response) => {
       calculateShippingForQR: config.calculateShippingForQR !== false,
     };
 
-    const existingDefault = await Address.findOne({ userId, isDefault: true });
     const addressData = {
-      userId, fullAddress, city, state: state ?? "", country, zipCode,
-      latitude: null, longitude: null, isDefault: true,
+      userId,
+      fullAddress,
+      city,
+      state: state ?? "",
+      country,
+      zipCode,
+      latitude: lat,
+      longitude: lng,
+      isDefault: true,
     };
     const address = existingDefault
       ? await Address.findByIdAndUpdate(existingDefault.id, addressData, { new: true })
@@ -172,14 +204,35 @@ export const previewShipping = async (req: Request, res: Response) => {
     let zipCode = "";
     try {
       const geo = await geocoder.reverse({ lat: latitude, lon: longitude });
-      if (geo.length) {
-        state = geo[0].state ?? "";
-        country = geo[0].country ?? "India";
-        city = geo[0].city ?? "";
-        zipCode = geo[0].zipcode ?? "";
-        fullAddress = cleanStreetAddress(geo[0].formattedAddress ?? "", city, state, zipCode, country);
+      if (!geo.length) {
+        return res.status(400).json({ message: "No delivery address found for these coordinates (ocean/water area). Please select a location on land in India." });
       }
-    } catch { /* geocoding failed — proceed with empty state */ }
+      const data = geo[0];
+      const countryName = (data.country || "").trim();
+      const countryCode = (data.countryCode || "").trim().toUpperCase();
+
+      if (
+        (countryCode && countryCode !== "IN") ||
+        (countryName && countryName.toLowerCase() !== "india") ||
+        (!countryName && !countryCode) ||
+        (!data.state && !data.city && !data.zipcode)
+      ) {
+        return res.status(400).json({
+          message: `Delivery is only available within India.${countryName && countryName.toLowerCase() !== "india" ? ` Selected location is in ${countryName}.` : " Please click on land in India."}`,
+        });
+      }
+
+      state = data.state ?? "";
+      country = "India";
+      city = data.city ?? "";
+      zipCode = data.zipcode ?? "";
+      fullAddress = cleanStreetAddress(data.formattedAddress ?? "", city, state, zipCode, country);
+    } catch (err: any) {
+      if (err.message && err.message.includes("Delivery is only available")) {
+        return res.status(400).json({ message: err.message });
+      }
+      return res.status(400).json({ message: "Could not resolve a valid delivery address for this location. Please click on land in India." });
+    }
 
     if (!state && typeof req.body.state === "string") state = req.body.state.trim();
     if (!city && typeof req.body.city === "string") city = req.body.city.trim();

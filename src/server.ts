@@ -40,7 +40,9 @@ import reviewRoutes from "./routes/review.routes";
 import homeBannerRoutes from "./routes/homeBanner.routes";
 import deliveryPartnerRoutes from "./routes/deliveryPartner.routes";
 import staticPagesRoutes from "./routes/staticPages.routes";
+import purchaseFeedbackRoutes from "./routes/purchaseFeedback.routes";
 import { getSitemap, getRobotsTxt } from "./controllers/seo.controller";
+import { serveDynamicHtml } from "./utils/htmlRenderer";
 
 
 const app = express();
@@ -181,6 +183,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/home-banners", homeBannerRoutes);
 app.use("/api/delivery-partners", deliveryPartnerRoutes);
 app.use("/api/pages", staticPagesRoutes);
+app.use("/api/purchase-feedback", purchaseFeedbackRoutes);
 
 // ── SEO: sitemap.xml / robots.txt ────────────────────────────────────────────
 // Mounted at the app root (not under /api) — search engines require robots.txt at
@@ -192,10 +195,9 @@ app.get("/robots.txt", getRobotsTxt);
 // ── Serve React Frontend ───────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, "../client")));
 
-// ── React Router Catch-all ─────────────────────────────────────────────────
-// NEW - works with Express 5
+// ── React Router Catch-all (Dynamic Branding & SEO Injection) ──────────────
 app.get("*splat", (req, res) => {
-  res.sendFile(path.join(__dirname, "../client", "index.html"));
+  serveDynamicHtml(req, res);
 });
 
 // ── Error Handler ─────────────────────────────────────────────────────────────

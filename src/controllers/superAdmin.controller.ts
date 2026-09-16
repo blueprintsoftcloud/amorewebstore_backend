@@ -45,12 +45,12 @@ export const getSuperAdminSummary = async (_req: Request, res: Response) => {
     ]);
 
     const revenue = await prisma.order.aggregate({
-      where: { paymentStatus: "PAID" },
+      where: { paymentStatus: "PAID", orderStatus: { notIn: ["CANCELLED", "RETURNED"] } },
       _sum: { finalAmount: true },
     });
 
     const recentRevenue = await prisma.order.aggregate({
-      where: { paymentStatus: "PAID", createdAt: { gte: last30 } },
+      where: { paymentStatus: "PAID", orderStatus: { notIn: ["CANCELLED", "RETURNED"] }, createdAt: { gte: last30 } },
       _sum: { finalAmount: true },
     });
 

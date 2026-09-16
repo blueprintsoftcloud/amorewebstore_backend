@@ -32,5 +32,6 @@ export const getAdminAndStaffRecipients = async (staffPermission: string): Promi
       select: { userId: true },
     }),
   ]);
-  return [...admins.map((u: any) => u.id), ...staff.map((s: any) => s.userId)];
+  const all = [...admins.map((u: any) => u.id), ...staff.map((s: any) => s.userId)];
+  return Array.from(new Set(all.filter(Boolean)));
 };

@@ -17,4 +17,9 @@ export const updateShippingConfigSchema = z.object({
   calculateShippingForOnline: z.boolean().optional(),
   calculateShippingForQR: z.boolean().optional(),
 });
-
+export const updateTrackingPartnerSettingsSchema = z.object({
+  enabled: z.boolean(),
+  enabledPartners: z.array(z.string().trim()).default([]),
+  partnerUrls: z.record(z.string(), z.string()).optional(),
+  deletedPartners: z.array(z.string().trim()).optional(),
+});

@@ -18,7 +18,7 @@ export const verifyPaymentSchema = z.object({
 export const updateOrderStatusSchema = z
   .object({
     orderStatus: z.enum(
-      ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"],
+      ["PROCESSING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"],
       { required_error: "Order status is required" },
     ),
     // Only meaningful when orderStatus === "SHIPPED" — see the superRefine below.
@@ -31,6 +31,9 @@ export const updateOrderStatusSchema = z
     trackingLink: z.string().trim().url("Tracking link must be a valid URL").optional().or(z.literal("")),
     // Manual/self-delivery only — a free-text note in place of courier/tracking fields.
     shippingNote: z.string().trim().max(500).optional(),
+    // When cancelling a paid order, admin can optionally mark as refunded immediately
+    refundPayment: z.boolean().optional(),
+    refundNote: z.string().trim().max(500).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.orderStatus !== "SHIPPED" || data.noDeliveryPartner) return;

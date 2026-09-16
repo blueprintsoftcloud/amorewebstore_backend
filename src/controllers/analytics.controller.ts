@@ -37,15 +37,15 @@ export const getSummary = async (_req: Request, res: Response) => {
         {
           $facet: {
             totalRevenue: [
-              { $match: { paymentStatus: "PAID" } },
+              { $match: { paymentStatus: "PAID", orderStatus: { $nin: ["CANCELLED", "RETURNED"] } } },
               { $group: { _id: null, sum: { $sum: "$finalAmount" } } },
             ],
             revenueThisMonth: [
-              { $match: { paymentStatus: "PAID", createdAt: { $gte: thirtyDaysAgo } } },
+              { $match: { paymentStatus: "PAID", orderStatus: { $nin: ["CANCELLED", "RETURNED"] }, createdAt: { $gte: thirtyDaysAgo } } },
               { $group: { _id: null, sum: { $sum: "$finalAmount" } } },
             ],
             revenuePrevMonth: [
-              { $match: { paymentStatus: "PAID", createdAt: { $gte: sixtyDaysAgo, $lt: thirtyDaysAgo } } },
+              { $match: { paymentStatus: "PAID", orderStatus: { $nin: ["CANCELLED", "RETURNED"] }, createdAt: { $gte: sixtyDaysAgo, $lt: thirtyDaysAgo } } },
               { $group: { _id: null, sum: { $sum: "$finalAmount" } } },
             ],
             totalOrders: [{ $count: "n" }],
@@ -115,7 +115,7 @@ export const getRevenueByDay = async (req: Request, res: Response) => {
     since.setDate(since.getDate() - days);
 
     const rows = await Order.aggregate([
-      { $match: { paymentStatus: "PAID", createdAt: { $gte: since } } },
+      { $match: { paymentStatus: "PAID", orderStatus: { $nin: ["CANCELLED", "RETURNED"] }, createdAt: { $gte: since } } },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },

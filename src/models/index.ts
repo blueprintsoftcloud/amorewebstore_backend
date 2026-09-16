@@ -28,6 +28,8 @@ export {
   PaymentLog,
   HomeBanner,
   CustomerTracker,
+  PurchaseSurveyConfig,
+  CancellationFeedback,
   // Aliases
   Attribute,
   AttributeValue,
@@ -58,6 +60,9 @@ export {
   type IPaymentLog,
   type IHomeBanner,
   type ICustomerTracker,
+  type IPurchaseSurveyConfig,
+  type ICancellationFeedback,
+  type ICancellationFeedbackItem,
   // Also export enums
   RoleEnum,
   OrderStatusEnum,

@@ -91,9 +91,9 @@ export const getStaffDashboard = async (_req: Request, res: Response) => {
       prisma.product.count(),
       prisma.category.count(),
       prisma.order.count({ where: { orderStatus: "PROCESSING" } }),
-      prisma.order.aggregate({ where: { paymentStatus: "PAID" }, _sum: { finalAmount: true } }),
-      prisma.order.aggregate({ where: { paymentStatus: "PAID", createdAt: { gte: thirtyDaysAgo } }, _sum: { finalAmount: true } }),
-      prisma.order.aggregate({ where: { paymentStatus: "PAID", createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } }, _sum: { finalAmount: true } }),
+      prisma.order.aggregate({ where: { paymentStatus: "PAID", orderStatus: { notIn: ["CANCELLED", "RETURNED"] } }, _sum: { finalAmount: true } }),
+      prisma.order.aggregate({ where: { paymentStatus: "PAID", orderStatus: { notIn: ["CANCELLED", "RETURNED"] }, createdAt: { gte: thirtyDaysAgo } }, _sum: { finalAmount: true } }),
+      prisma.order.aggregate({ where: { paymentStatus: "PAID", orderStatus: { notIn: ["CANCELLED", "RETURNED"] }, createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } }, _sum: { finalAmount: true } }),
     ]);
 
     // Order status breakdown (pie chart)
@@ -105,7 +105,7 @@ export const getStaffDashboard = async (_req: Request, res: Response) => {
 
     // Revenue by day — last 7 days (bar chart), grouped in the database
     const revenueByDayAgg = await Order.aggregate([
-      { $match: { paymentStatus: "PAID", createdAt: { $gte: sevenDaysAgo } } },
+      { $match: { paymentStatus: "PAID", orderStatus: { $nin: ["CANCELLED", "RETURNED"] }, createdAt: { $gte: sevenDaysAgo } } },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },

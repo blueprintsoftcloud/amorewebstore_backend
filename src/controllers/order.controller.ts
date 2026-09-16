@@ -29,7 +29,8 @@ const notifyUsers = async (
   actorId: string,
   recipientIds: string[],
 ): Promise<void> => {
-  for (const recipientId of recipientIds) {
+  const uniqueRecipients = Array.from(new Set(recipientIds.filter(Boolean)));
+  for (const recipientId of uniqueRecipients) {
     try {
       await sendNotification({ message, orderId, type, triggeredById: actorId, recipientId });
     } catch (err) {
@@ -151,10 +152,11 @@ export const preCheckout = async (req: Request, res: Response) => {
 export const placeOrder = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { couponId, buyNowProductId, buyNowVariantId } = req.body as {
+    const { couponId, buyNowProductId, buyNowVariantId, shippingAddress: incomingAddress } = req.body as {
       couponId?: string;
       buyNowProductId?: string;
       buyNowVariantId?: string;
+      shippingAddress?: any;
     };
 
     const cart = await prisma.cart.findUnique({
@@ -255,6 +257,24 @@ export const placeOrder = async (req: Request, res: Response) => {
     // transaction below fails, the Razorpay order is simply never referenced by any
     // persisted Order (a harmless orphan on Razorpay's side, not a data-integrity issue).
     const order = await prisma.$transaction(async (tx: typeof prisma) => {
+      const finalShippingAddress = incomingAddress?.fullAddress ? {
+        fullAddress: incomingAddress.fullAddress,
+        city: incomingAddress.city || address.city,
+        state: incomingAddress.state || address.state,
+        zipCode: incomingAddress.zipCode || address.zipCode,
+        country: incomingAddress.country || address.country || "India",
+        lat: typeof incomingAddress.lat === "number" ? incomingAddress.lat : (address.latitude ?? undefined),
+        lng: typeof incomingAddress.lng === "number" ? incomingAddress.lng : (address.longitude ?? undefined),
+      } : {
+        fullAddress: address.fullAddress,
+        city: address.city,
+        state: address.state,
+        zipCode: address.zipCode,
+        country: address.country,
+        lat: address.latitude ?? undefined,
+        lng: address.longitude ?? undefined,
+      };
+
       const created = await tx.order.create({
         data: {
           userId,
@@ -268,13 +288,7 @@ export const placeOrder = async (req: Request, res: Response) => {
           orderStatus: "PROCESSING",
           razorpayOrderId: rzpOrder.id,
           couponId: resolvedCouponId,
-          shippingAddress: {
-            fullAddress: address.fullAddress,
-            city: address.city,
-            state: address.state,
-            zipCode: address.zipCode,
-            country: address.country,
-          },
+          shippingAddress: finalShippingAddress,
           items: { create: orderItems },
         },
       });
@@ -486,10 +500,11 @@ export const verifyPayment = async (req: Request, res: Response) => {
 export const placeOrderPOD = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { couponId, buyNowProductId, buyNowVariantId } = req.body as {
+    const { couponId, buyNowProductId, buyNowVariantId, shippingAddress: incomingAddress } = req.body as {
       couponId?: string;
       buyNowProductId?: string;
       buyNowVariantId?: string;
+      shippingAddress?: any;
     };
 
     const cart = await prisma.cart.findUnique({
@@ -581,6 +596,24 @@ export const placeOrderPOD = async (req: Request, res: Response) => {
     // Order + coupon usage + stock deduction + cart clear + payment log all succeed or
     // fail together (see placeOrder above for why).
     const order = await prisma.$transaction(async (tx: typeof prisma) => {
+      const finalShippingAddress = incomingAddress?.fullAddress ? {
+        fullAddress: incomingAddress.fullAddress,
+        city: incomingAddress.city || address.city,
+        state: incomingAddress.state || address.state,
+        zipCode: incomingAddress.zipCode || address.zipCode,
+        country: incomingAddress.country || address.country || "India",
+        lat: typeof incomingAddress.lat === "number" ? incomingAddress.lat : (address.latitude ?? undefined),
+        lng: typeof incomingAddress.lng === "number" ? incomingAddress.lng : (address.longitude ?? undefined),
+      } : {
+        fullAddress: address.fullAddress,
+        city: address.city,
+        state: address.state,
+        zipCode: address.zipCode,
+        country: address.country,
+        lat: address.latitude ?? undefined,
+        lng: address.longitude ?? undefined,
+      };
+
       const created = await tx.order.create({
         data: {
           userId,
@@ -593,13 +626,7 @@ export const placeOrderPOD = async (req: Request, res: Response) => {
           paymentStatus: "PENDING",
           orderStatus: "CONFIRMED",
           couponId: resolvedCouponId,
-          shippingAddress: {
-            fullAddress: address.fullAddress,
-            city: address.city,
-            state: address.state,
-            zipCode: address.zipCode,
-            country: address.country,
-          },
+          shippingAddress: finalShippingAddress,
           items: { create: orderItems },
         },
       });
@@ -684,12 +711,19 @@ export const placeOrderPOD = async (req: Request, res: Response) => {
 export const placeOrderQR = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { couponId, buyNowProductId, buyNowVariantId, transactionId } = req.body as {
+    const { couponId, buyNowProductId, buyNowVariantId, transactionId, shippingAddress: rawShippingAddress } = req.body as {
       couponId?: string;
       buyNowProductId?: string;
       buyNowVariantId?: string;
       transactionId?: string;
+      shippingAddress?: any;
     };
+    let incomingAddress = rawShippingAddress;
+    if (typeof incomingAddress === "string") {
+      try {
+        incomingAddress = JSON.parse(incomingAddress);
+      } catch {}
+    }
     const rawTxId = transactionId?.trim() ? transactionId.trim().replace(/[\s-]/g, "") : undefined;
     let trimmedTxId: string | undefined;
 
@@ -808,6 +842,24 @@ export const placeOrderQR = async (req: Request, res: Response) => {
     const finalAmount = Math.max(subtotal + shippingCharge - discountAmount, 0);
 
     const order = await prisma.$transaction(async (tx: typeof prisma) => {
+      const finalShippingAddress = incomingAddress?.fullAddress ? {
+        fullAddress: incomingAddress.fullAddress,
+        city: incomingAddress.city || address.city,
+        state: incomingAddress.state || address.state,
+        zipCode: incomingAddress.zipCode || address.zipCode,
+        country: incomingAddress.country || address.country || "India",
+        lat: typeof incomingAddress.lat === "number" ? incomingAddress.lat : (address.latitude ?? undefined),
+        lng: typeof incomingAddress.lng === "number" ? incomingAddress.lng : (address.longitude ?? undefined),
+      } : {
+        fullAddress: address.fullAddress,
+        city: address.city,
+        state: address.state,
+        zipCode: address.zipCode,
+        country: address.country,
+        lat: address.latitude ?? undefined,
+        lng: address.longitude ?? undefined,
+      };
+
       const created = await tx.order.create({
         data: {
           userId,
@@ -822,13 +874,7 @@ export const placeOrderQR = async (req: Request, res: Response) => {
           transactionId: trimmedTxId,
           paymentScreenshot: screenshotUrl,
           couponId: resolvedCouponId,
-          shippingAddress: {
-            fullAddress: address.fullAddress,
-            city: address.city,
-            state: address.state,
-            zipCode: address.zipCode,
-            country: address.country,
-          },
+          shippingAddress: finalShippingAddress,
           items: { create: orderItems },
         },
       });
@@ -1255,25 +1301,75 @@ export const getOrdersForAdmin = async (req: Request, res: Response) => {
 // of orders happened to be loaded, which silently undercounts the moment there are more
 // orders than the page size. Same ORDER_VIEW gate as /order/all, so anyone who can see the
 // order table can see accurate totals for it.
-export const getOrderStats = async (_req: Request, res: Response) => {
+export const getOrderStats = async (req: Request, res: Response) => {
   try {
-    const [facet] = await Order.aggregate([
-      {
-        $facet: {
-          totalCount: [{ $count: "n" }],
-          byStatus: [{ $group: { _id: "$orderStatus", count: { $sum: 1 } } }],
-          // "Gross income" is realized revenue — only orders actually paid for, not the
-          // face value of every order including cancelled/pending ones.
-          paidRevenue: [{ $match: { paymentStatus: "PAID" } }, { $group: { _id: null, sum: { $sum: "$finalAmount" } } }],
-          totalOrderValue: [{ $group: { _id: null, sum: { $sum: "$finalAmount" } } }],
-          unprintedCount: [
-            { $match: { invoicePrinted: { $ne: true }, orderStatus: { $ne: "CANCELLED" } } },
-            { $count: "n" },
-          ],
-        },
+    const { status, source, placedBy, invoicePrinted } = req.query as Record<string, string | undefined>;
+    const match: Record<string, any> = {};
+
+    if (status) {
+      match.orderStatus = status.toUpperCase();
+    }
+
+    if (placedBy && placedBy.trim()) {
+      if (mongoose.Types.ObjectId.isValid(placedBy.trim())) {
+        match.placedByAdminId = new mongoose.Types.ObjectId(placedBy.trim());
+      }
+    } else if (source === "ADMIN" || source === "STAFF") {
+      match.placedByAdminId = { $ne: null };
+    } else if (source === "CUSTOMER") {
+      match.placedByAdminId = null;
+    }
+
+    if (invoicePrinted === "true") {
+      match.invoicePrinted = true;
+    } else if (invoicePrinted === "false") {
+      match.invoicePrinted = { $ne: true };
+      if (!status) {
+        match.orderStatus = { $ne: "CANCELLED" };
+      }
+    }
+
+    const pipeline: any[] = [];
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+
+    pipeline.push({
+      $facet: {
+        totalCount: [{ $count: "n" }],
+        byStatus: [{ $group: { _id: "$orderStatus", count: { $sum: 1 } } }],
+        // "Gross income" is realized revenue — only orders actually paid for and active (not cancelled/returned)
+        paidRevenue: [
+          { $match: { paymentStatus: "PAID", orderStatus: { $nin: ["CANCELLED", "RETURNED"] } } },
+          { $group: { _id: null, sum: { $sum: "$finalAmount" } } },
+        ],
+        totalOrderValue: [
+          { $match: { orderStatus: { $nin: ["CANCELLED", "RETURNED"] } } },
+          { $group: { _id: null, sum: { $sum: "$finalAmount" } } },
+        ],
       },
+    });
+
+    const unprintedMatch: Record<string, any> = {
+      invoicePrinted: { $ne: true },
+      orderStatus: { $ne: "CANCELLED" },
+    };
+    if (placedBy && placedBy.trim()) {
+      if (mongoose.Types.ObjectId.isValid(placedBy.trim())) {
+        unprintedMatch.placedByAdminId = new mongoose.Types.ObjectId(placedBy.trim());
+      }
+    } else if (source === "ADMIN" || source === "STAFF") {
+      unprintedMatch.placedByAdminId = { $ne: null };
+    } else if (source === "CUSTOMER") {
+      unprintedMatch.placedByAdminId = null;
+    }
+
+    const [facetResult, unprintedCount] = await Promise.all([
+      Order.aggregate(pipeline),
+      Order.countDocuments(unprintedMatch),
     ]);
 
+    const facet = facetResult[0];
     const byStatus = new Map((facet?.byStatus ?? []).map((r: any) => [r._id as string, r.count as number]));
 
     res.status(200).json({
@@ -1286,7 +1382,7 @@ export const getOrderStats = async (_req: Request, res: Response) => {
       delivered: byStatus.get("DELIVERED") ?? 0,
       cancelled: byStatus.get("CANCELLED") ?? 0,
       returned: byStatus.get("RETURNED") ?? 0,
-      unprintedInvoices: facet?.unprintedCount?.[0]?.n ?? 0,
+      unprintedInvoices: unprintedCount,
     });
   } catch (err: any) {
     logger.error("getOrderStats error", err);
@@ -1306,6 +1402,8 @@ export const updateStatus = async (req: Request, res: Response) => {
       trackingId,
       trackingLink,
       shippingNote,
+      refundPayment,
+      refundNote,
     } = req.body as {
       orderStatus: OrderStatus;
       deliveryPartnerId?: string;
@@ -1314,6 +1412,8 @@ export const updateStatus = async (req: Request, res: Response) => {
       trackingId?: string;
       trackingLink?: string;
       shippingNote?: string;
+      refundPayment?: boolean;
+      refundNote?: string;
     };
     const adminId = req.user!.id;
 
@@ -1382,9 +1482,15 @@ export const updateStatus = async (req: Request, res: Response) => {
     // cancelOrder() above (an admin double-clicking "cancel"/"return", or two open tabs).
     let updated;
     if (orderStatus === "CANCELLED" || orderStatus === "RETURNED") {
+      const cancelExtra: Record<string, unknown> = {};
+      const shouldRefund = orderStatus === "CANCELLED" && refundPayment === true && order.paymentStatus === "PAID";
+      if (shouldRefund) {
+        cancelExtra.paymentStatus = "REFUNDED";
+      }
+
       updated = await prisma.order.update({
         where: { id, orderStatus: { notIn: ["CANCELLED", "RETURNED"] } },
-        data: { orderStatus },
+        data: { orderStatus, ...cancelExtra },
       });
       if (!updated) {
         return res.status(400).json({ message: `This order was already ${orderStatus.toLowerCase()}.` });
@@ -1393,28 +1499,79 @@ export const updateStatus = async (req: Request, res: Response) => {
         orderId: id,
         items: order.items.map((item: any) => ({ productId: item.productId, variantId: item.variantId ?? null, quantity: item.quantity })),
       });
+
       await prisma.paymentLog.create({
         data: {
           orderId: id,
           userId: order.userId,
           event: orderStatus === "RETURNED" ? "ORDER_RETURNED" : "ORDER_CANCELLED",
           paymentMethod: order.paymentMethod,
-          paymentStatus: order.paymentStatus,
+          paymentStatus: shouldRefund ? "REFUNDED" : order.paymentStatus,
           amount: order.finalAmount,
           gatewayResponse: {
             [orderStatus === "RETURNED" ? "returnedBy" : "cancelledBy"]: adminId,
             self: false,
+            refundedOnCancellation: shouldRefund,
             reason: orderStatus === "RETURNED" ? "Courier returned to origin before delivery" : undefined,
           },
           signatureValid: null,
           ipAddress: req.ip ?? null,
         },
       });
+
+      if (shouldRefund) {
+        await prisma.paymentLog.create({
+          data: {
+            orderId: id,
+            userId: order.userId,
+            event: "REFUND_RECORDED",
+            paymentMethod: order.paymentMethod,
+            paymentStatus: "REFUNDED",
+            amount: order.finalAmount,
+            notes: refundNote?.trim() || "Refund recorded during order cancellation",
+            gatewayResponse: { recordedBy: adminId, onCancellation: true },
+            signatureValid: null,
+            ipAddress: req.ip ?? null,
+          },
+        });
+        await createAuditLog({
+          req,
+          action: "RECORD_REFUND",
+          entity: "Order",
+          entityId: id,
+          details: { amount: order.finalAmount, note: refundNote?.trim() || "Recorded during cancellation" },
+        });
+      }
     } else {
+      const isDeliveredPending = orderStatus === "DELIVERED" && order.paymentStatus === "PENDING";
+      const extraData: Record<string, unknown> = {};
+      if (isDeliveredPending) {
+        extraData.paymentStatus = "PAID";
+      }
+
       updated = await prisma.order.update({
         where: { id },
-        data: { orderStatus, ...shippingData },
+        data: { orderStatus, ...shippingData, ...extraData },
       });
+
+      if (isDeliveredPending) {
+        await prisma.paymentLog.create({
+          data: {
+            orderId: id,
+            userId: order.userId,
+            event: "PAYMENT_COLLECTED_ON_DELIVERY",
+            paymentMethod: order.paymentMethod,
+            paymentStatus: "PAID",
+            amount: order.finalAmount,
+            gatewayResponse: {
+              collectedBy: adminId,
+              note: "Cash on delivery payment collected upon order delivery",
+            },
+            signatureValid: null,
+            ipAddress: req.ip ?? null,
+          },
+        });
+      }
     }
 
     const admin = await prisma.user.findUnique({

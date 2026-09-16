@@ -166,7 +166,7 @@ export const calculateShippingWithConfig = async (
 ): Promise<ShippingBreakdown> => {
   // No international shipping
   if (country && country.toLowerCase() !== "india") {
-    return { shippingCharge: 0, distanceKm: 0, type: "free", label: "No international shipping available" };
+    return { shippingCharge: 0, distanceKm: 0, type: "other_state", label: "Delivery is only available in India" };
   }
 
   const stateClean = (state || "").trim().toLowerCase();
