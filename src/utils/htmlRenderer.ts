@@ -91,15 +91,15 @@ const fetchBrandingData = async (): Promise<BrandingSeoCache> => {
   }
 
   const defaultData: BrandingSeoCache = {
-    companyName: "Store",
-    companyTagline: "Shop online — quality products, fast delivery.",
+    companyName: "Amore Webstore",
+    companyTagline: "Crafted by leading air freshener manufacturers, Amor brings high-quality, refreshing scents to your space. Order yours today!",
     companyLogo: "",
-    companyFavicon: "/vite.svg",
-    seoTitle: "",
-    seoDescription: "",
+    companyFavicon: "/favicon.png",
+    seoTitle: "Amore Webstore",
+    seoDescription: "Crafted by leading air freshener manufacturers, Amor brings high-quality, refreshing scents to your space. Order yours today!",
     seoOgImage: "",
-    seoKeywords: "",
-    googleVerification: "",
+    seoKeywords: "Air freshener,Perfumed oil,Perfumes",
+    googleVerification: "A6M6BitJ7rpbVjf_W3tVTZk3lCpTMuKKy3bExzTULl0",
     metaPixelId: "",
     cachedAt: now,
   };
@@ -307,4 +307,9 @@ export const serveDynamicHtml = async (req: Request, res: Response): Promise<voi
   } else {
     res.status(404).type("text/plain").send("Application frontend not found.");
   }
+};
+
+export const getFaviconUrl = async (): Promise<string | null> => {
+  const data = await fetchBrandingData();
+  return data.companyFavicon || null;
 };

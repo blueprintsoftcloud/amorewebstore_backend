@@ -43,7 +43,7 @@ import deliveryPartnerRoutes from "./routes/deliveryPartner.routes";
 import staticPagesRoutes from "./routes/staticPages.routes";
 import purchaseFeedbackRoutes from "./routes/purchaseFeedback.routes";
 import { getSitemap, getRobotsTxt } from "./controllers/seo.controller";
-import { serveDynamicHtml } from "./utils/htmlRenderer";
+import { serveDynamicHtml, getFaviconUrl } from "./utils/htmlRenderer";
 
 
 const app = express();
@@ -186,12 +186,21 @@ app.use("/api/delivery-partners", deliveryPartnerRoutes);
 app.use("/api/pages", staticPagesRoutes);
 app.use("/api/purchase-feedback", purchaseFeedbackRoutes);
 
-// ── SEO: sitemap.xml / robots.txt ────────────────────────────────────────────
+// ── SEO: sitemap.xml / robots.txt / favicon ──────────────────────────────────
 // Mounted at the app root (not under /api) — search engines require robots.txt at
 // the domain root, and this backend already serves the built frontend from this
 // same origin (see the static/catch-all below), so no separate proxy rule is needed.
 app.get("/sitemap.xml", getSitemap);
 app.get("/robots.txt", getRobotsTxt);
+app.get(["/favicon.ico", "/favicon.png"], async (req, res) => {
+  try {
+    const faviconUrl = await getFaviconUrl();
+    if (faviconUrl && faviconUrl.startsWith("http")) {
+      return res.redirect(302, faviconUrl);
+    }
+  } catch (e) {}
+  res.status(404).end();
+});
 
 // ── Serve React Frontend ───────────────────────────────────────────────────
 const candidateStaticDirs = [
