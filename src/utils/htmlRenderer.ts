@@ -253,6 +253,18 @@ export const renderDynamicHtml = async (): Promise<string | null> => {
     <!-- End Meta Pixel Base Code -->`);
   }
 
+  // Google WebSite Schema for Site Name recognition
+  if (data.companyName) {
+    const siteSchema = {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: data.companyName,
+      alternateName: ["Amore", "amorewebstore.com", data.companyName],
+      url: "https://www.amorewebstore.com",
+    };
+    extraMetas.push(`<script type="application/ld+json">${JSON.stringify(siteSchema)}</script>`);
+  }
+
   const metaBlock = `\n    <!-- Server-Injected Dynamic Branding & SEO -->\n    ${extraMetas.join("\n    ")}\n`;
 
   // Inject metaBlock right before </head>
