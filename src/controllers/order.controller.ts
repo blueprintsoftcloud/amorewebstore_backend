@@ -746,13 +746,7 @@ export const placeOrderQR = async (req: Request, res: Response) => {
       screenshotUrl = await uploadToCloudinary(req.file.buffer, "payment_receipts");
     }
 
-    if (!trimmedTxId && !screenshotUrl) {
-      res.status(400).json({
-        message: "Please enter your 12-digit UTR or upload a payment screenshot.",
-      });
-      return;
-    }
-
+    // Transaction ID and screenshot are optional for QR orders
     const [address, cart] = await Promise.all([
       prisma.address.findFirst({ where: { userId, isDefault: true } }),
       prisma.cart.findUnique({
@@ -908,7 +902,11 @@ export const placeOrderQR = async (req: Request, res: Response) => {
           transactionId: trimmedTxId,
           paymentScreenshot: screenshotUrl,
           signatureValid: null,
-          notes: trimmedTxId ? `UTR: ${trimmedTxId}` : "Payment screenshot attached",
+          notes: trimmedTxId
+            ? `UTR: ${trimmedTxId}`
+            : screenshotUrl
+            ? "Payment screenshot attached"
+            : "Paid via QR code (proof pending/optional)",
           gatewayResponse: {
             transactionId: trimmedTxId,
             paymentScreenshot: screenshotUrl,
